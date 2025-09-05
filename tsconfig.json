@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "compilerOptions": {
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
@@ -13,15 +14,74 @@
     "isolatedModules": true,
     "jsx": "preserve",
     "incremental": true,
+=======
+  // TypeScript configuration for OptiBuild application
+  // Defines compiler options and project structure for type checking
+  "compilerOptions": {
+    // JavaScript libraries to include in compilation
+    "lib": ["dom", "dom.iterable", "esnext"],
+    
+    // Allow JavaScript files alongside TypeScript files
+    "allowJs": true,
+    
+    // Target ECMAScript version for compilation
+    "target": "ES6",
+    
+    // Skip type checking of declaration files for faster builds
+    "skipLibCheck": true,
+    
+    // Enable strict type checking for better code quality
+    "strict": true,
+    
+    // Don't emit JavaScript files (Next.js handles this)
+    "noEmit": true,
+    
+    // Enable ES module interop for CommonJS compatibility
+    "esModuleInterop": true,
+    
+    // Use ES modules for module system
+    "module": "esnext",
+    
+    // Use bundler-based module resolution (Next.js)
+    "moduleResolution": "bundler",
+    
+    // Allow importing JSON files as modules
+    "resolveJsonModule": true,
+    
+    // Ensure each file is treated as a separate module
+    "isolatedModules": true,
+    
+    // Preserve JSX syntax for Next.js processing
+    "jsx": "preserve",
+    
+    // Enable incremental compilation for faster rebuilds
+    "incremental": true,
+    
+    // Next.js TypeScript plugin for framework-specific features
+>>>>>>> 34d06b5 (Updated the +New Project section)
     "plugins": [
       {
         "name": "next"
       }
     ],
+<<<<<<< HEAD
+=======
+    
+    // Path mapping for import aliases
+    // Enables @/ prefix for imports from project root
+>>>>>>> 34d06b5 (Updated the +New Project section)
     "paths": {
       "@/*": ["./*"]
     }
   },
+<<<<<<< HEAD
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+=======
+  
+  // Files and directories to include in TypeScript compilation
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
+  
+  // Files and directories to exclude from compilation
+>>>>>>> 34d06b5 (Updated the +New Project section)
   "exclude": ["node_modules"]
 }

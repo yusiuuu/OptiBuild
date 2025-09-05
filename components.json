@@ -1,4 +1,5 @@
 {
+<<<<<<< HEAD
   "$schema": "https://ui.shadcn.com/schema.json",
   "style": "default",
   "rsc": true,
@@ -17,5 +18,52 @@
     "lib": "@/lib",
     "hooks": "@/hooks"
   },
+=======
+  // Configuration file for shadcn/ui component library
+  // Defines project settings and path aliases for UI components
+  
+  // Schema reference for shadcn/ui configuration validation
+  "$schema": "https://ui.shadcn.com/schema.json",
+  
+  // Visual style preset for components (default theme)
+  "style": "default",
+  
+  // Enable React Server Components support
+  "rsc": true,
+  
+  // Use TypeScript JSX (.tsx) files for components
+  "tsx": true,
+  
+  // Tailwind CSS configuration settings
+  "tailwind": {
+    // Path to Tailwind configuration file
+    "config": "tailwind.config.ts",
+    // Path to global CSS file
+    "css": "app/globals.css",
+    // Base color scheme for design system
+    "baseColor": "neutral",
+    // Enable CSS custom properties for theming
+    "cssVariables": true,
+    // CSS class prefix (empty for no prefix)
+    "prefix": ""
+  },
+  
+  // Path aliases for import statements
+  // Provides convenient shortcuts for component imports
+  "aliases": {
+    // Main components directory
+    "components": "@/components",
+    // Utility functions directory
+    "utils": "@/lib/utils",
+    // UI component library directory
+    "ui": "@/components/ui",
+    // Library functions directory
+    "lib": "@/lib",
+    // Custom React hooks directory
+    "hooks": "@/hooks"
+  },
+  
+  // Icon library to use for components
+>>>>>>> 34d06b5 (Updated the +New Project section)
   "iconLibrary": "lucide"
 }
