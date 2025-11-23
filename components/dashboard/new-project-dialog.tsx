@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -23,9 +23,10 @@ import { format } from "date-fns"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { projectsService } from "@/lib/data-service"
+import { enhancedProjectsService, constraintsService, type ConstraintMaster, type Project } from "@/lib/data-service"
 import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "sonner"
+import { PostProjectCreationWorkflow } from "./post-project-creation-workflow"
 
 // Props interface for the new project dialog component
 // Controls dialog open/close state from parent component
@@ -41,6 +42,8 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [currentStep, setCurrentStep] = useState(1)
   const totalSteps = 4
+  const [createdProject, setCreatedProject] = useState<Project | null>(null)
+  const [showWorkflow, setShowWorkflow] = useState(false)
   
   // Basic Project Information
   const [projectName, setProjectName] = useState("")
@@ -57,17 +60,10 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
   const [floors, setFloors] = useState("")
   const [buildingHeight, setBuildingHeight] = useState("")
   
-  // Project Constraints
-  const [constraints, setConstraints] = useState({
-    budgetLimit: false,
-    timeConstraint: false,
-    environmentalRestrictions: false,
-    safetyRequirements: false,
-    accessibilityCompliance: false,
-    zoningRestrictions: false
-  })
-  
-  const [constraintDetails, setConstraintDetails] = useState("")
+  // Project Constraints (from database)
+  const [constraintsMaster, setConstraintsMaster] = useState<ConstraintMaster[]>([])
+  const [selectedConstraintIds, setSelectedConstraintIds] = useState<string[]>([])
+  const [constraintDetails, setConstraintDetails] = useState<Record<string, string>>({})
   
   // Project Requirements
   const [requirements, setRequirements] = useState({
@@ -78,6 +74,22 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
     hvacSystem: false,
     renewableEnergy: false
   })
+
+  // Load constraints master list on mount
+  useEffect(() => {
+    const loadConstraints = async () => {
+      try {
+        const constraints = await constraintsService.getConstraintsMaster()
+        setConstraintsMaster(constraints)
+      } catch (error) {
+        console.error('Error loading constraints:', error)
+        toast.error('Failed to load constraints')
+      }
+    }
+    if (open) {
+      loadConstraints()
+    }
+  }, [open])
 
   // Handle form submission for new project creation
   const handleSubmit = async (e: React.FormEvent) => {
@@ -90,6 +102,12 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
     setIsSubmitting(true)
 
     try {
+      // Validate required fields
+      if (!projectName || !projectType || !location || !startDate || !endDate || !budget) {
+        toast.error("Please fill in all required fields")
+        return
+      }
+
       // Send full extended fields now that the schema is updated
       const projectDataDb = {
         user_id: user.id,
@@ -100,25 +118,40 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
         end_date: endDate?.toISOString().split('T')[0],
         budget: parseFloat(budget) || 0,
         description: description,
-        area_sqft: parseFloat(areaSqft) || 0,
+        area_sqft: parseFloat(areaSqft) || undefined,
+        total_area: parseFloat(areaSqft) || undefined, // Also set total_area
         structure_type: structureType,
-        floors: parseInt(floors) || 0,
-        constraints: {
-          ...constraints,
-          details: constraintDetails,
-          buildingHeight: buildingHeight
-        },
+        floors: parseInt(floors) || undefined,
+        building_height: buildingHeight ? parseFloat(buildingHeight) : undefined,
         project_requirements: requirements,
         status: 'Planning',
         progress: 0
       }
 
-      await projectsService.createProject(projectDataDb)
+      // Create project with constraints using enhanced service
+      const createdProject = await enhancedProjectsService.createProjectWithConstraints(
+        projectDataDb,
+        selectedConstraintIds.length > 0 ? selectedConstraintIds : undefined
+      )
+
+      // If constraints have details, update them
+      if (selectedConstraintIds.length > 0) {
+        // Note: Details will be handled separately if needed
+        // For now, constraints are assigned without details
+        // You can extend this to add details per constraint
+      }
+
       toast.success("Project created successfully!")
+      
+      // Store created project and show workflow
+      setCreatedProject(createdProject)
       
       // Reset form
       resetForm()
       onOpenChange(false)
+      
+      // Show post-creation workflow
+      setShowWorkflow(true)
     } catch (error) {
       const message = error instanceof Error ? error.message : (() => {
         try { return JSON.stringify(error) } catch { return String(error) }
@@ -132,6 +165,7 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
 
   const resetForm = () => {
     setCurrentStep(1)
+    setCreatedProject(null)
     setProjectName("")
     setProjectType("")
     setLocation("")
@@ -143,15 +177,8 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
     setStructureType("")
     setFloors("")
     setBuildingHeight("")
-    setConstraints({
-      budgetLimit: false,
-      timeConstraint: false,
-      environmentalRestrictions: false,
-      safetyRequirements: false,
-      accessibilityCompliance: false,
-      zoningRestrictions: false
-    })
-    setConstraintDetails("")
+    setSelectedConstraintIds([])
+    setConstraintDetails({})
     setRequirements({
       parkingSpaces: "",
       elevators: "",
@@ -373,31 +400,52 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
                 <CardContent className="space-y-4">
                   <div className="space-y-3">
                     <Label>Select applicable constraints:</Label>
-                    {Object.entries(constraints).map(([key, value]) => (
-                      <div key={key} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={key}
-                          checked={value}
-                          onCheckedChange={(checked) =>
-                            setConstraints(prev => ({ ...prev, [key]: checked }))
-                          }
-                        />
-                        <Label htmlFor={key} className="text-sm font-normal">
-                          {getConstraintLabel(key)}
-                        </Label>
-                      </div>
-                    ))}
-                  </div>
-                  
-                  <div>
-                    <Label htmlFor="constraint-details">Additional Constraint Details</Label>
-                    <Textarea
-                      id="constraint-details"
-                      value={constraintDetails}
-                      onChange={(e) => setConstraintDetails(e.target.value)}
-                      placeholder="Describe any specific constraints or requirements..."
-                      rows={3}
-                    />
+                    {constraintsMaster.length === 0 ? (
+                      <div className="text-sm text-muted-foreground">Loading constraints...</div>
+                    ) : (
+                      constraintsMaster.map((constraint) => (
+                        <div key={constraint.id} className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <Checkbox
+                              id={constraint.id}
+                              checked={selectedConstraintIds.includes(constraint.id || '')}
+                              onCheckedChange={(checked) => {
+                                if (checked) {
+                                  setSelectedConstraintIds(prev => [...prev, constraint.id || ''])
+                                } else {
+                                  setSelectedConstraintIds(prev => prev.filter(id => id !== constraint.id))
+                                  setConstraintDetails(prev => {
+                                    const newDetails = { ...prev }
+                                    delete newDetails[constraint.id || '']
+                                    return newDetails
+                                  })
+                                }
+                              }}
+                            />
+                            <Label htmlFor={constraint.id} className="text-sm font-normal cursor-pointer">
+                              {constraint.name}
+                            </Label>
+                          </div>
+                          {constraint.description && (
+                            <p className="text-xs text-muted-foreground ml-6">{constraint.description}</p>
+                          )}
+                          {selectedConstraintIds.includes(constraint.id || '') && (
+                            <div className="ml-6">
+                              <Textarea
+                                placeholder={`Additional details for ${constraint.name}...`}
+                                value={constraintDetails[constraint.id || ''] || ''}
+                                onChange={(e) => setConstraintDetails(prev => ({
+                                  ...prev,
+                                  [constraint.id || '']: e.target.value
+                                }))}
+                                rows={2}
+                                className="text-sm"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -489,6 +537,16 @@ export function NewProjectDialog({ open, onOpenChange }: NewProjectDialogProps) 
           </DialogFooter>
         </form>
       </DialogContent>
+      
+      {/* Post-creation workflow */}
+      {createdProject && (
+        <PostProjectCreationWorkflow
+          open={showWorkflow}
+          onOpenChange={setShowWorkflow}
+          projectId={createdProject.id!}
+          project={createdProject}
+        />
+      )}
     </Dialog>
   )
 }
@@ -504,17 +562,6 @@ function getStepTitle(step: number): string {
   }
 }
 
-function getConstraintLabel(key: string): string {
-  const labels: Record<string, string> = {
-    budgetLimit: "Budget Limit",
-    timeConstraint: "Time Constraint",
-    environmentalRestrictions: "Environmental Restrictions",
-    safetyRequirements: "Safety Requirements",
-    accessibilityCompliance: "Accessibility Compliance",
-    zoningRestrictions: "Zoning Restrictions"
-  }
-  return labels[key] || key
-}
 
 function getRequirementLabel(key: string): string {
   const labels: Record<string, string> = {

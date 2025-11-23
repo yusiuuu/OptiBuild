@@ -116,10 +116,10 @@ export function AIChatbot() {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg flex items-center gap-2">
                   <Bot className="h-5 w-5" />
-                  <span>Code Brigade Assistant</span>
+                  <span>OptiBuild Assistant</span>
                 </CardTitle>
                 <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
-                  Code Brigade
+                  Optix
                 </Badge>
               </div>
             </CardHeader>

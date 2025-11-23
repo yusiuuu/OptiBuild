@@ -69,6 +69,24 @@ CREATE TABLE IF NOT EXISTS public.team_members (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Create project_team_members table (many-to-many relationship between projects and team members)
+-- This table links team members to specific projects with optional role information
+CREATE TABLE IF NOT EXISTS public.project_team_members (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE NOT NULL,
+    team_member_id UUID REFERENCES public.team_members(id) ON DELETE CASCADE NOT NULL,
+    role_in_project TEXT,
+    added_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(project_id, team_member_id)
+);
+
+-- Create indexes for project_team_members for better query performance
+CREATE INDEX IF NOT EXISTS idx_project_team_members_project_id ON public.project_team_members(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_team_members_team_member_id ON public.project_team_members(team_member_id);
+CREATE INDEX IF NOT EXISTS idx_project_team_members_project_team ON public.project_team_members(project_id, team_member_id);
+
 -- Create certifications table
 CREATE TABLE IF NOT EXISTS public.certifications (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -269,6 +287,24 @@ CREATE TABLE IF NOT EXISTS public.team_members (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Create project_team_members table (many-to-many relationship between projects and team members)
+-- This table links team members to specific projects with optional role information
+CREATE TABLE IF NOT EXISTS public.project_team_members (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE NOT NULL,
+    team_member_id UUID REFERENCES public.team_members(id) ON DELETE CASCADE NOT NULL,
+    role_in_project TEXT,
+    added_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    UNIQUE(project_id, team_member_id)
+);
+
+-- Create indexes for project_team_members for better query performance
+CREATE INDEX IF NOT EXISTS idx_project_team_members_project_id ON public.project_team_members(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_team_members_team_member_id ON public.project_team_members(team_member_id);
+CREATE INDEX IF NOT EXISTS idx_project_team_members_project_team ON public.project_team_members(project_id, team_member_id);
+
 -- Create certifications table
 CREATE TABLE IF NOT EXISTS public.certifications (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -315,7 +351,42 @@ CREATE TABLE IF NOT EXISTS public.tasks (
 );
 
 -- Create resources table for resource management
+-- Resources table (Global Resource Catalog - user-owned, not project-specific)
+-- Resources are global to users and can be assigned to projects via project_resources table
 CREATE TABLE IF NOT EXISTS public.resources (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
+    name TEXT NOT NULL,
+    type TEXT CHECK (type IN ('material', 'labour', 'equipment')) NOT NULL,
+    unit TEXT NOT NULL, -- kg, hr, item, etc.
+    base_cost DECIMAL(15,2) NOT NULL DEFAULT 0,
+    description TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Project Resources table (Links resources to projects)
+-- Stores resource assignments from the global catalog to specific projects
+CREATE TABLE IF NOT EXISTS public.project_resources (
+    id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+    project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE NOT NULL,
+    resource_id UUID REFERENCES public.resources(id) ON DELETE CASCADE NOT NULL,
+    quantity DECIMAL(10,2) NOT NULL CHECK (quantity > 0),
+    allocated_from DATE NOT NULL,
+    allocated_to DATE NOT NULL,
+    total_cost DECIMAL(15,2),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    CHECK (allocated_to >= allocated_from)
+);
+
+-- Create indexes for project_resources
+CREATE INDEX IF NOT EXISTS idx_project_resources_project_id ON public.project_resources(project_id);
+CREATE INDEX IF NOT EXISTS idx_project_resources_resource_id ON public.project_resources(resource_id);
+CREATE INDEX IF NOT EXISTS idx_project_resources_dates ON public.project_resources(allocated_from, allocated_to);
+
+-- Create optimization_results table for storing GA and ML results
+CREATE TABLE IF NOT EXISTS public.optimization_results (
     id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
     project_id UUID REFERENCES public.projects(id) ON DELETE CASCADE NOT NULL,
     user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,

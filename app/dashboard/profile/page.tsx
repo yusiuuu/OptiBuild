@@ -5,8 +5,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Camera, Mail, Phone, MapPin, Building, Briefcase, ArrowLeft, FileText, Award, Users, HardHat, IndianRupee, Calendar, Plus, Edit, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { Progress } from "@/components/ui/progress";
@@ -14,15 +16,46 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { projectsService, teamMembersService, certificationsService, documentsService, Project, TeamMember, Certification, Document } from "@/lib/data-service";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { NewProjectDialog } from "@/components/dashboard/new-project-dialog";
+import { AddTeamMemberDialog } from "@/components/profile/add-team-member-dialog";
+import { AddCertificationDialog } from "@/components/profile/add-certification-dialog";
+import { AddDocumentDialog } from "@/components/profile/add-document-dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 export default function ProfilePage() {
+  const router = useRouter();
   const [isEditing, setIsEditing] = useState(false);
-  const { user, userProfile, updateUserProfile } = useAuth();
+  const { user, userProfile, updateUserProfile, canManageProjects } = useAuth();
   const [projects, setProjects] = useState<Project[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [certifications, setCertifications] = useState<Certification[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Dialog states
+  const [newProjectDialogOpen, setNewProjectDialogOpen] = useState(false);
+  const [teamMemberDialogOpen, setTeamMemberDialogOpen] = useState(false);
+  const [editingTeamMember, setEditingTeamMember] = useState<TeamMember | null>(null);
+  const [certificationDialogOpen, setCertificationDialogOpen] = useState(false);
+  const [editingCertification, setEditingCertification] = useState<Certification | null>(null);
+  const [documentDialogOpen, setDocumentDialogOpen] = useState(false);
+  const [editingDocument, setEditingDocument] = useState<Document | null>(null);
+
+  // Delete confirmation states
+  const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
+  const [deleteTeamMemberId, setDeleteTeamMemberId] = useState<string | null>(null);
+  const [deleteCertificationId, setDeleteCertificationId] = useState<string | null>(null);
+  const [deleteDocumentId, setDeleteDocumentId] = useState<string | null>(null);
 
   // Form state for profile editing
   const [profileForm, setProfileForm] = useState({
@@ -113,41 +146,118 @@ export default function ProfilePage() {
     setIsEditing(false);
   };
 
+  // Delete handlers
+  const handleDeleteProject = async () => {
+    if (!deleteProjectId) return;
+    try {
+      await projectsService.deleteProject(deleteProjectId);
+      toast.success("Project deleted successfully");
+      setDeleteProjectId(null);
+      loadData();
+    } catch (error) {
+      console.error('Error deleting project:', error);
+      toast.error("Failed to delete project");
+    }
+  };
+
+  const handleDeleteTeamMember = async () => {
+    if (!deleteTeamMemberId) return;
+    try {
+      await teamMembersService.deleteTeamMember(deleteTeamMemberId);
+      toast.success("Team member deleted successfully");
+      setDeleteTeamMemberId(null);
+      loadData();
+    } catch (error) {
+      console.error('Error deleting team member:', error);
+      toast.error("Failed to delete team member");
+    }
+  };
+
+  const handleDeleteCertification = async () => {
+    if (!deleteCertificationId) return;
+    try {
+      await certificationsService.deleteCertification(deleteCertificationId);
+      toast.success("Certification deleted successfully");
+      setDeleteCertificationId(null);
+      loadData();
+    } catch (error) {
+      console.error('Error deleting certification:', error);
+      toast.error("Failed to delete certification");
+    }
+  };
+
+  const handleDeleteDocument = async () => {
+    if (!deleteDocumentId) return;
+    try {
+      await documentsService.deleteDocument(deleteDocumentId);
+      toast.success("Document deleted successfully");
+      setDeleteDocumentId(null);
+      loadData();
+    } catch (error) {
+      console.error('Error deleting document:', error);
+      toast.error("Failed to delete document");
+    }
+  };
+
+  // Edit handlers
+  const handleEditTeamMember = (member: TeamMember) => {
+    setEditingTeamMember(member);
+    setTeamMemberDialogOpen(true);
+  };
+
+  const handleEditCertification = (cert: Certification) => {
+    setEditingCertification(cert);
+    setCertificationDialogOpen(true);
+  };
+
+  const handleEditDocument = (doc: Document) => {
+    setEditingDocument(doc);
+    setDocumentDialogOpen(true);
+  };
+
+  const handleViewProject = (projectId: string) => {
+    router.push(`/dashboard/projects/${projectId}`);
+  };
+
   if (loading) {
     return (
-      <div className="container mx-auto py-10">
-        <div className="text-center">Loading profile data...</div>
+      <div className="h-full w-full overflow-y-auto">
+        <div className="container mx-auto py-10">
+          <div className="text-center">Loading profile data...</div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-10">
-      <div className="max-w-6xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard">
-              <Button variant="ghost" size="icon" className="rounded-full">
-                <ArrowLeft className="h-5 w-5" />
-              </Button>
-            </Link>
-            <h1 className="text-3xl font-bold">Company Profile</h1>
-          </div>
-          <div className="flex gap-2">
-            {isEditing ? (
-              <>
-                <Button onClick={handleProfileCancel} variant="outline">
-                  Cancel
+    <div className="h-full w-full overflow-y-auto">
+      <div className="container mx-auto py-10 px-4">
+        <div className="max-w-6xl mx-auto">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-4">
+              <Link href="/dashboard">
+                <Button variant="ghost" size="icon" className="rounded-full">
+                  <ArrowLeft className="h-5 w-5" />
                 </Button>
-                <Button onClick={handleProfileSave}>
-                  Save Changes
+              </Link>
+              <h1 className="text-3xl font-bold">Company Profile</h1>
+            </div>
+            <div className="flex gap-2">
+              {isEditing ? (
+                <>
+                  <Button onClick={handleProfileCancel} variant="outline">
+                    Cancel
+                  </Button>
+                  <Button onClick={handleProfileSave}>
+                    Save Changes
+                  </Button>
+                </>
+              ) : (
+                <Button onClick={() => setIsEditing(true)}>
+                  Edit Profile
                 </Button>
-              </>
-            ) : (
-              <Button onClick={() => setIsEditing(true)}>
-                Edit Profile
-              </Button>
-            )}
+              )}
+            </div>
           </div>
         </div>
 
@@ -188,6 +298,18 @@ export default function ProfilePage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">Company Name</Label>
+                  {isEditing ? (
+                    <Input
+                      value={profileForm.company_name}
+                      onChange={(e) => setProfileForm({...profileForm, company_name: e.target.value})}
+                      placeholder="Enter company name"
+                    />
+                  ) : (
+                    <p className="font-medium">{userProfile?.company_name || "Company name not set"}</p>
+                  )}
+                </div>
                 <div className="space-y-2">
                   <Label className="text-muted-foreground">Location</Label>
                   {isEditing ? (
@@ -233,6 +355,32 @@ export default function ProfilePage() {
                     <Mail className="h-4 w-4 text-muted-foreground" />
                     <p>{userProfile?.email || "Email not set"}</p>
                   </div>
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">Role</Label>
+                  {isEditing ? (
+                    <Select 
+                      value={profileForm.role} 
+                      onValueChange={(value) => setProfileForm({...profileForm, role: value})}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select role" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="company_admin">Company Admin (Full Access)</SelectItem>
+                        <SelectItem value="project_manager">Project Manager</SelectItem>
+                        <SelectItem value="engineer">Engineer</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Badge variant={userProfile?.role === 'company_admin' ? 'default' : 'secondary'}>
+                        {userProfile?.role === 'company_admin' ? 'Company Admin' : 
+                         userProfile?.role === 'project_manager' ? 'Project Manager' : 
+                         userProfile?.role === 'engineer' ? 'Engineer' : 'Not Set'}
+                      </Badge>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -293,6 +441,19 @@ export default function ProfilePage() {
                     <p>{userProfile?.website || "Website not set"}</p>
                   )}
                 </div>
+                <div className="space-y-2">
+                  <Label className="text-muted-foreground">About Company</Label>
+                  {isEditing ? (
+                    <Textarea
+                      value={profileForm.about}
+                      onChange={(e) => setProfileForm({...profileForm, about: e.target.value})}
+                      placeholder="Enter company description"
+                      rows={4}
+                    />
+                  ) : (
+                    <p className="text-sm">{userProfile?.about || "No description available"}</p>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -314,7 +475,7 @@ export default function ProfilePage() {
                       <HardHat className="h-5 w-5" />
                       Projects ({projects.length})
                     </span>
-                    <Button size="sm">
+                    <Button size="sm" onClick={() => setNewProjectDialogOpen(true)}>
                       <Plus className="h-4 w-4 mr-2" />
                       Add Project
                     </Button>
@@ -326,9 +487,9 @@ export default function ProfilePage() {
                   ) : (
                     <div className="space-y-4">
                       {projects.map((project) => (
-                        <div key={project.id} className="border rounded-lg p-4">
+                        <div key={project.id} className="border rounded-lg p-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors cursor-pointer" onClick={() => handleViewProject(project.id!)}>
                           <div className="flex items-center justify-between">
-                            <div>
+                            <div className="flex-1">
                               <h4 className="font-semibold">{project.name}</h4>
                               <p className="text-sm text-muted-foreground">{project.location} • {project.type}</p>
                               <div className="flex items-center gap-4 mt-2">
@@ -343,11 +504,22 @@ export default function ProfilePage() {
                                 </span>
                               </div>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <Button size="sm" variant="outline">
+                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => handleViewProject(project.id!)}
+                                title="View Project"
+                              >
                                 <Edit className="h-4 w-4" />
                               </Button>
-                              <Button size="sm" variant="outline">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => setDeleteProjectId(project.id || null)}
+                                title="Delete Project"
+                                className="text-red-600 hover:text-red-700"
+                              >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
@@ -375,7 +547,10 @@ export default function ProfilePage() {
                       <Users className="h-5 w-5" />
                       Team Members ({teamMembers.length})
                     </span>
-                    <Button size="sm">
+                    <Button size="sm" onClick={() => {
+                      setEditingTeamMember(null);
+                      setTeamMemberDialogOpen(true);
+                    }}>
                       <Plus className="h-4 w-4 mr-2" />
                       Add Member
                     </Button>
@@ -396,10 +571,21 @@ export default function ProfilePage() {
                               <p className="text-sm text-muted-foreground">{member.email}</p>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Button size="sm" variant="outline">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => handleEditTeamMember(member)}
+                                title="Edit Team Member"
+                              >
                                 <Edit className="h-4 w-4" />
                               </Button>
-                              <Button size="sm" variant="outline">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => setDeleteTeamMemberId(member.id || null)}
+                                title="Delete Team Member"
+                                className="text-red-600 hover:text-red-700"
+                              >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
@@ -420,7 +606,10 @@ export default function ProfilePage() {
                       <Award className="h-5 w-5" />
                       Certifications ({certifications.length})
                     </span>
-                    <Button size="sm">
+                    <Button size="sm" onClick={() => {
+                      setEditingCertification(null);
+                      setCertificationDialogOpen(true);
+                    }}>
                       <Plus className="h-4 w-4 mr-2" />
                       Add Certification
                     </Button>
@@ -445,10 +634,21 @@ export default function ProfilePage() {
                               </p>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Button size="sm" variant="outline">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => handleEditCertification(cert)}
+                                title="Edit Certification"
+                              >
                                 <Edit className="h-4 w-4" />
                               </Button>
-                              <Button size="sm" variant="outline">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => setDeleteCertificationId(cert.id || null)}
+                                title="Delete Certification"
+                                className="text-red-600 hover:text-red-700"
+                              >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
@@ -469,7 +669,10 @@ export default function ProfilePage() {
                       <FileText className="h-5 w-5" />
                       Documents ({documents.length})
                     </span>
-                    <Button size="sm">
+                    <Button size="sm" onClick={() => {
+                      setEditingDocument(null);
+                      setDocumentDialogOpen(true);
+                    }}>
                       <Plus className="h-4 w-4 mr-2" />
                       Upload Document
                     </Button>
@@ -493,10 +696,21 @@ export default function ProfilePage() {
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
-                              <Button size="sm" variant="outline">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => handleEditDocument(doc)}
+                                title="Edit Document"
+                              >
                                 <Edit className="h-4 w-4" />
                               </Button>
-                              <Button size="sm" variant="outline">
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => setDeleteDocumentId(doc.id || null)}
+                                title="Delete Document"
+                                className="text-red-600 hover:text-red-700"
+                              >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
@@ -511,6 +725,114 @@ export default function ProfilePage() {
           </Tabs>
         </div>
       </div>
+
+      {/* Dialogs */}
+      <NewProjectDialog 
+        open={newProjectDialogOpen} 
+        onOpenChange={(open) => {
+          setNewProjectDialogOpen(open);
+          if (!open) loadData();
+        }} 
+      />
+
+      <AddTeamMemberDialog
+        open={teamMemberDialogOpen}
+        onOpenChange={(open) => {
+          setTeamMemberDialogOpen(open);
+          if (!open) setEditingTeamMember(null);
+        }}
+        teamMember={editingTeamMember}
+        onTeamMemberAdded={loadData}
+      />
+
+      <AddCertificationDialog
+        open={certificationDialogOpen}
+        onOpenChange={(open) => {
+          setCertificationDialogOpen(open);
+          if (!open) setEditingCertification(null);
+        }}
+        certification={editingCertification}
+        onCertificationAdded={loadData}
+      />
+
+      <AddDocumentDialog
+        open={documentDialogOpen}
+        onOpenChange={(open) => {
+          setDocumentDialogOpen(open);
+          if (!open) setEditingDocument(null);
+        }}
+        document={editingDocument}
+        onDocumentAdded={loadData}
+      />
+
+      {/* Delete Confirmation Dialogs */}
+      <AlertDialog open={!!deleteProjectId} onOpenChange={(open) => !open && setDeleteProjectId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Project</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this project? This action cannot be undone and will delete all associated data.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteProject} className="bg-red-600 hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteTeamMemberId} onOpenChange={(open) => !open && setDeleteTeamMemberId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Team Member</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this team member? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteTeamMember} className="bg-red-600 hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteCertificationId} onOpenChange={(open) => !open && setDeleteCertificationId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Certification</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this certification? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteCertification} className="bg-red-600 hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={!!deleteDocumentId} onOpenChange={(open) => !open && setDeleteDocumentId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Document</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this document? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDeleteDocument} className="bg-red-600 hover:bg-red-700">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 } 

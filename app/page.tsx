@@ -12,7 +12,7 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen">
       {/* Hero Section: Main landing area with video background and call-to-action */}
-      <section className="relative w-full h-screen flex items-center justify-center overflow-hidden bg-gradient-to-br from-slate-900 to-slate-800">
+      <section className="relative w-full h-[85vh] min-h-[600px] max-h-[800px] flex items-center justify-center overflow-hidden bg-gradient-to-br from-slate-900 to-slate-800">
         <div className="absolute inset-0 w-full h-full">
           {/* Gradient overlays: Multiple layers for visual depth and text readability */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-black/40 to-black/60 z-10"></div>
@@ -58,8 +58,8 @@ export default function Home() {
         </div>
 
         {/* Hero content container with responsive grid layout */}
-        <div className="container relative z-20 px-6 md:px-8 lg:px-12">
-          <div className="grid gap-8 lg:grid-cols-[1fr_400px] lg:gap-16 xl:grid-cols-[1fr_600px]">
+        <div className="container relative z-20 px-4 md:px-6 lg:px-8 max-w-7xl mx-auto">
+          <div className="grid gap-6 lg:grid-cols-[1fr_350px] lg:gap-12 xl:grid-cols-[1fr_500px]">
             {/* Left side: Main headline and description with animated entrance */}
             <div className="flex flex-col justify-center space-y-6">
               <div className="space-y-4">
@@ -104,7 +104,7 @@ export default function Home() {
               animate={{ opacity: 1, scale: 1 }}
               transition={{ duration: 0.7, delay: 0.3 }}
             >
-              <div className="relative w-full max-w-[500px] aspect-video overflow-hidden rounded-xl border border-gray-200/20 bg-gradient-to-br from-gray-900/90 to-gray-800/90 p-1 shadow-2xl">
+              <div className="relative w-full max-w-[400px] aspect-video overflow-hidden rounded-xl border border-gray-200/20 bg-gradient-to-br from-gray-900/90 to-gray-800/90 p-1 shadow-2xl">
                 <div className="absolute inset-0 bg-gradient-to-br from-blue-500/20 to-purple-500/20 rounded-lg"></div>
                 <img
                   alt="Dashboard Preview"
@@ -118,7 +118,7 @@ export default function Home() {
       </section>
 
       {/* Features Section: Showcases the key capabilities of the platform */}
-      <section className="w-full py-16 md:py-28 lg:py-36 bg-white">
+      <section className="w-full py-12 md:py-16 lg:py-20 bg-white">
         <div className="container px-6 md:px-8 lg:px-12">
           {/* Section header with title and description */}
           <div className="flex flex-col items-center justify-center space-y-6 text-center">
@@ -134,7 +134,7 @@ export default function Home() {
             </div>
           </div>
           {/* Feature cards grid with hover animations and staggered entrance */}
-          <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3 mt-16">
+          <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 mt-12">
             {/* Data Integration Feature Card */}
             <motion.div
               whileHover={{ y: -5, transition: { duration: 0.2 } }}
@@ -261,7 +261,7 @@ export default function Home() {
       </section>
 
       {/* CTA Section: Call-to-action for user registration and sales contact */}
-      <section className="w-full py-16 md:py-28 lg:py-36 bg-gradient-to-br from-slate-900 to-slate-800 text-white">
+      <section className="w-full py-12 md:py-16 lg:py-20 bg-gradient-to-br from-slate-900 to-slate-800 text-white">
         <div className="container px-6 md:px-8 lg:px-12">
           <div className="flex flex-col items-center justify-center space-y-6 text-center">
             <div className="space-y-4">
@@ -290,7 +290,7 @@ export default function Home() {
       </section>
 
       {/* Contact Section: Company contact information and location details */}
-      <section className="w-full py-16 md:py-28 lg:py-36 bg-white" id="contact">
+      <section className="w-full py-12 md:py-16 lg:py-20 bg-white" id="contact">
         <div className="container px-6 md:px-8 lg:px-12">
           {/* Section header with animated entrance */}
           <div className="flex flex-col items-center justify-center space-y-6 text-center">
@@ -310,7 +310,7 @@ export default function Home() {
           </div>
           
           {/* Contact information cards with hover animations */}
-          <div className="mx-auto grid max-w-6xl grid-cols-1 gap-8 md:grid-cols-2 lg:grid-cols-3 mt-16">
+          <div className="mx-auto grid max-w-6xl grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3 mt-12">
             {/* Phone contact card */}
             <motion.div
               whileHover={{ y: -5, transition: { duration: 0.2 } }}

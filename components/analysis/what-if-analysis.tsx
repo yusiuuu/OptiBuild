@@ -114,10 +114,37 @@ export function WhatIfAnalysis({
       return
     }
 
+    // Check if we have tasks and resources available
+    if (!tasks || tasks.length === 0) {
+      alert('No tasks available. Please add tasks to the project first.')
+      return
+    }
+
+    if (!resources || resources.length === 0) {
+      alert('No resources available. Please add resources to the project first.')
+      return
+    }
+
     setIsRunning(true)
     try {
+      // Ensure baseScenario has input_parameters
+      // If missing, reconstruct from props (tasks and resources)
+      let scenarioToUse = baseScenario
+      if (!baseScenario.input_parameters || !baseScenario.input_parameters.tasks) {
+        console.warn('Base scenario missing input_parameters, reconstructing from props')
+        scenarioToUse = {
+          ...baseScenario,
+          input_parameters: {
+            tasks: tasks || [],
+            resources: resources || [],
+            constraints: baseScenario.input_parameters?.constraints || {},
+            config: baseScenario.input_parameters?.config || {}
+          }
+        }
+      }
+
       const result = await optimizationEngine.runWhatIfAnalysis(
-        baseScenario,
+        scenarioToUse,
         selectedScenarioType,
         scenarioParameters
       )

@@ -43,6 +43,7 @@ type AuthContextType = {
   canManageProjects: () => boolean
   canViewAnalytics: () => boolean
   canGenerateReports: () => boolean
+  hasFullAccess: () => boolean
 }
 
 // Create React context for authentication state management
@@ -57,27 +58,79 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // Loading state while checking authentication status
   const [loading, setLoading] = useState(true)
 
+  // Fetch and refresh user profile data from the database
+  // Called after authentication state changes or profile updates
+  const refreshUserProfile = async (userId?: string) => {
+    try {
+      const targetUserId = userId || user?.id
+      if (!targetUserId) return
+      
+      const { data, error } = await supabase
+        .from('user_profiles')
+        .select('*')
+        .eq('id', targetUserId)
+        .single()
+      
+      if (error) {
+        // Handle specific error cases
+        if (error.code === 'PGRST116') {
+          // Profile doesn't exist yet, that's okay
+          console.log('User profile not found, will be created on first update')
+          return
+        }
+        throw error
+      }
+      
+      setUserProfile(data)
+    } catch (error: any) {
+      // Handle network errors gracefully
+      if (error?.message === 'Failed to fetch' || error?.name === 'NetworkError') {
+        console.warn('Network error while fetching profile, will retry later')
+        return
+      }
+      console.error('Error fetching profile:', error)
+    }
+  }
+
   // Initialize authentication state and set up auth state change listeners
   useEffect(() => {
     // Check for existing active session on component mount
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        refreshUserProfile()
-      }
-      setLoading(false)
-    })
+    supabase.auth.getSession()
+      .then(({ data: { session }, error }) => {
+        if (error) {
+          console.error('Error getting session:', error)
+          // Don't throw, just set loading to false and continue
+        }
+        setUser(session?.user ?? null)
+        if (session?.user) {
+          refreshUserProfile(session.user.id)
+        }
+        setLoading(false)
+      })
+      .catch((error) => {
+        // Handle network errors gracefully
+        console.warn('Failed to fetch session, this may be due to connectivity issues:', error)
+        setLoading(false)
+        // Don't set user to null on network errors, allow retry
+      })
 
     // Set up real-time listener for authentication state changes
     // Handles sign in, sign out, token refresh, etc.
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null)
-      if (session?.user) {
-        refreshUserProfile()
-      } else {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      // Handle errors during auth state changes
+      if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN' || event === 'SIGNED_OUT') {
+        setUser(session?.user ?? null)
+        if (session?.user) {
+          refreshUserProfile(session.user.id)
+        } else {
+          setUserProfile(null)
+        }
+        setLoading(false)
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null)
         setUserProfile(null)
+        setLoading(false)
       }
-      setLoading(false)
     })
 
     // Cleanup subscription on component unmount
@@ -153,15 +206,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   // Update user profile information in the database
+  // Creates profile if it doesn't exist, updates if it does
   // Refreshes profile data after successful update and shows success toast
   const updateUserProfile = async (profile: Partial<UserProfile>) => {
     try {
       if (!user) throw new Error('No user logged in')
       
+      // Use upsert to create or update the profile
+      const profileData = {
+        id: user.id,
+        email: user.email || '',
+        ...profile,
+        updated_at: new Date().toISOString()
+      }
+      
       const { error } = await supabase
         .from('user_profiles')
-        .update(profile)
-        .eq('id', user.id)
+        .upsert(profileData, {
+          onConflict: 'id'
+        })
       
       if (error) throw error
       
@@ -172,26 +235,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Error updating profile:', error)
       toast.error('Failed to update profile')
       throw error
-    }
-  }
-
-  // Fetch and refresh user profile data from the database
-  // Called after authentication state changes or profile updates
-  const refreshUserProfile = async () => {
-    try {
-      if (!user) return
-      
-      const { data, error } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single()
-      
-      if (error) throw error
-      
-      setUserProfile(data)
-    } catch (error) {
-      console.error('Error fetching profile:', error)
     }
   }
 
@@ -206,6 +249,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   const canManageProjects = () => {
+    // Company admin has full access to everything
     return hasRole('company_admin') || hasRole('project_manager')
   }
 
@@ -215,6 +259,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const canGenerateReports = () => {
     return hasRole('company_admin') || hasRole('project_manager')
+  }
+
+  // Company admin has full access to all operations
+  const hasFullAccess = () => {
+    return hasRole('company_admin')
   }
 
   // Context value object containing all auth state and functions
@@ -232,7 +281,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     hasPermission,
     canManageProjects,
     canViewAnalytics,
-    canGenerateReports
+    canGenerateReports,
+    hasFullAccess
   }
 
   // Render children only after initial auth check is complete

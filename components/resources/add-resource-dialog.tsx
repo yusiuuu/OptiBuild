@@ -17,14 +17,17 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Loader2 } from "lucide-react"
+import { resourcesCatalogService } from "@/lib/data-service"
+import { toast } from "sonner"
 
 interface AddResourceDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   resourceType: string
+  onResourceAdded?: () => void
 }
 
-export function AddResourceDialog({ open, onOpenChange, resourceType }: AddResourceDialogProps) {
+export function AddResourceDialog({ open, onOpenChange, resourceType, onResourceAdded }: AddResourceDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [formData, setFormData] = useState({
     name: "",
@@ -44,14 +47,84 @@ export function AddResourceDialog({ open, onOpenChange, resourceType }: AddResou
     setFormData((prev) => ({ ...prev, [field]: value }))
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validation
+    if (!formData.name.trim()) {
+      toast.error("Resource name is required")
+      return
+    }
+
+    if (!formData.category) {
+      toast.error("Category is required")
+      return
+    }
+
+    // Map resource type to database format
+    let resourceTypeDb: 'material' | 'labour' | 'equipment' = 'material'
+    if (resourceType === 'equipment') {
+      resourceTypeDb = 'equipment'
+    } else if (resourceType === 'labor') {
+      resourceTypeDb = 'labour' // Note: database uses 'labour' not 'labor'
+    }
+
+    // Determine unit and base_cost based on resource type
+    let unit = formData.unit || 'unit'
+    let baseCost = 0
+
+    if (resourceType === 'materials') {
+      unit = formData.unit || 'unit'
+      baseCost = parseFloat(formData.cost) || 0
+      if (!formData.unit) {
+        toast.error("Unit is required for materials")
+        return
+      }
+      if (baseCost <= 0) {
+        toast.error("Unit cost must be greater than 0")
+        return
+      }
+    } else if (resourceType === 'equipment') {
+      unit = 'day' // Equipment is typically rented by day
+      baseCost = parseFloat(formData.dailyRate) || 0
+      if (baseCost <= 0) {
+        toast.error("Daily rate must be greater than 0")
+        return
+      }
+    } else if (resourceType === 'labor') {
+      unit = 'day' // Labor is typically paid by day
+      baseCost = parseFloat(formData.dailyWage) || 0
+      if (baseCost <= 0) {
+        toast.error("Daily wage must be greater than 0")
+        return
+      }
+    }
+
     setIsSubmitting(true)
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false)
-      onOpenChange(false)
+    try {
+      // Build description from available fields and user notes
+      const descriptionParts: string[] = []
+      if (formData.description) descriptionParts.push(formData.description.trim())
+      if (formData.category) descriptionParts.push(`Category: ${formData.category}`)
+      if (formData.supplier) descriptionParts.push(`Supplier: ${formData.supplier}`)
+      if (formData.location) descriptionParts.push(`Location: ${formData.location}`)
+      if (formData.condition) descriptionParts.push(`Condition: ${formData.condition}`)
+      if (formData.supervisor) descriptionParts.push(`Supervisor: ${formData.supervisor}`)
+      if (formData.quantity) descriptionParts.push(`Quantity: ${formData.quantity}`)
+
+      const description = descriptionParts.length > 0 ? descriptionParts.join(' | ') : undefined
+
+      // Create resource in database
+      await resourcesCatalogService.createResource({
+        name: formData.name.trim(),
+        type: resourceTypeDb,
+        unit: unit,
+        base_cost: baseCost,
+        description: description,
+      })
+
+      toast.success(`${resourceType.charAt(0).toUpperCase() + resourceType.slice(1)} resource added successfully!`)
 
       // Reset form
       setFormData({
@@ -66,10 +139,34 @@ export function AddResourceDialog({ open, onOpenChange, resourceType }: AddResou
         supervisor: "",
         dailyRate: "",
         dailyWage: "",
+        description: "",
       })
 
-      // In a real app, you would save the resource data here
-    }, 1500)
+      // Close dialog
+      onOpenChange(false)
+
+      // Refresh resources list
+      onResourceAdded?.()
+    } catch (error: any) {
+      console.warn('Error creating resource:', error)
+      let errorMessage = "Failed to create resource"
+      if (error?.message) {
+        errorMessage = error.message
+      } else if (error?.details) {
+        errorMessage = typeof error.details === 'string' ? error.details : JSON.stringify(error.details)
+      } else if (error?.hint) {
+        errorMessage = error.hint
+      } else if (error?.code) {
+        errorMessage = `Database error (code: ${error.code}). Please check your connection.`
+      } else if (typeof error === 'string') {
+        errorMessage = error
+      } else if (error instanceof Error) {
+        errorMessage = error.message || error.toString()
+      }
+      toast.error(errorMessage)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   // Define categories based on resource type
@@ -287,13 +384,15 @@ export function AddResourceDialog({ open, onOpenChange, resourceType }: AddResou
 
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="notes" className="text-right">
-                Notes
+                Description
               </Label>
               <Textarea
                 id="notes"
                 className="col-span-3"
                 rows={3}
                 placeholder="Additional information about this resource..."
+                value={formData.description || ""}
+                onChange={(e) => handleChange("description", e.target.value)}
               />
             </div>
           </div>

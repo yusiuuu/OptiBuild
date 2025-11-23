@@ -1,122 +1,38 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ArrowRight, TrendingDown, TrendingUp, AlertTriangle } from "lucide-react"
 
-// Mock data for materials resource optimization recommendations
-// AI-generated suggestions for improving material usage and allocation
-const materialsOptimization = [
-  {
-    id: 1,
-    resource: "Concrete Usage",
-    change: "-15%",
-    impact: "high",
-    description: "Optimized mix design can reduce concrete usage by 15%",
-    type: "reduction",
-    project: "Office Tower Phase 1",
-  },
-  {
-    id: 2,
-    resource: "Steel Allocation",
-    change: "+8%",
-    impact: "medium",
-    description: "Reallocate steel from Project A to Project C",
-    type: "efficiency",
-    project: "Residential Complex",
-  },
-  {
-    id: 3,
-    resource: "Timber Sourcing",
-    change: "-22%",
-    impact: "high",
-    description: "Switch to local sustainable timber sources",
-    type: "reduction",
-    project: "All Projects",
-  },
-  {
-    id: 4,
-    resource: "Insulation Materials",
-    change: "-10%",
-    impact: "medium",
-    description: "Use higher R-value insulation to reduce quantity needed",
-    type: "reduction",
-    project: "Shopping Mall",
-  },
-]
-
-// Mock data for labor resource optimization recommendations
-// AI-generated suggestions for improving workforce efficiency and allocation
-const laborOptimization = [
-  {
-    id: 1,
-    resource: "Skilled Labor",
-    change: "-8%",
-    impact: "medium",
-    description: "Redistribute skilled workers across projects based on critical path",
-    type: "efficiency",
-    project: "All Projects",
-  },
-  {
-    id: 2,
-    resource: "Overtime Hours",
-    change: "-20%",
-    impact: "high",
-    description: "Optimize scheduling to reduce overtime requirements",
-    type: "reduction",
-    project: "Highway Extension",
-  },
-  {
-    id: 3,
-    resource: "Specialized Crews",
-    change: "+15%",
-    impact: "high",
-    description: "Increase specialized crews for complex tasks to improve quality and speed",
-    type: "efficiency",
-    project: "Office Tower Phase 1",
-  },
-]
-
-// Mock data for equipment resource optimization recommendations
-// AI-generated suggestions for improving equipment utilization and efficiency
-const equipmentOptimization = [
-  {
-    id: 1,
-    resource: "Heavy Machinery",
-    change: "-12%",
-    impact: "high",
-    description: "Share equipment between nearby project sites",
-    type: "efficiency",
-    project: "Highway Extension",
-  },
-  {
-    id: 2,
-    resource: "Tool Inventory",
-    change: "-5%",
-    impact: "low",
-    description: "Implement tool tracking system to reduce losses",
-    type: "reduction",
-    project: "All Projects",
-  },
-  {
-    id: 3,
-    resource: "Equipment Idle Time",
-    change: "-25%",
-    impact: "high",
-    description: "Optimize equipment scheduling to minimize idle time",
-    type: "efficiency",
-    project: "Residential Complex",
-  },
-]
+// No mock data - optimization recommendations will be generated from real project data
 
 // Resource optimization tabs component for construction project management
 // Displays AI-powered recommendations for optimizing materials, labor, and equipment usage
 export function ResourceOptimizationTabs() {
   // State to track which optimization category is currently active
   const [activeTab, setActiveTab] = useState("materials")
+  const [optimizations, setOptimizations] = useState<{
+    materials: any[]
+    labor: any[]
+    equipment: any[]
+  }>({
+    materials: [],
+    labor: [],
+    equipment: []
+  })
+
+  // Load optimization data from real projects (placeholder for now)
+  useEffect(() => {
+    // TODO: Implement real optimization logic based on project data
+    setOptimizations({
+      materials: [],
+      labor: [],
+      equipment: []
+    })
+  }, [])
 
   // Generate impact badge with appropriate color coding
   // Visual indicators for the potential impact of optimization recommendations
@@ -153,11 +69,11 @@ export function ResourceOptimizationTabs() {
   const getActiveData = () => {
     switch (activeTab) {
       case "materials":
-        return materialsOptimization
+        return optimizations.materials
       case "labor":
-        return laborOptimization
+        return optimizations.labor
       case "equipment":
-        return equipmentOptimization
+        return optimizations.equipment
       default:
         return []
     }
@@ -166,13 +82,13 @@ export function ResourceOptimizationTabs() {
   return (
     <Card>
       {/* Card header with title and description */}
-      <CardHeader>
-        <CardTitle>Resource Optimization</CardTitle>
-        <CardDescription>AI-powered recommendations for resource optimization</CardDescription>
+      <CardHeader className="px-4 pt-4 pb-3">
+        <CardTitle className="text-base">Resource Optimization</CardTitle>
+        <CardDescription className="text-xs">AI-powered recommendations for resource optimization</CardDescription>
       </CardHeader>
       
       {/* Card content with tabbed interface */}
-      <CardContent>
+      <CardContent className="px-4 pb-4">
         <Tabs defaultValue="materials" value={activeTab} onValueChange={setActiveTab}>
           {/* Tab navigation for different resource categories */}
           <TabsList className="grid w-full grid-cols-3">
@@ -183,10 +99,16 @@ export function ResourceOptimizationTabs() {
           
           {/* Tab content area with optimization recommendations */}
           <TabsContent value={activeTab} className="space-y-4 pt-4">
-            {/* Grid layout for optimization recommendation cards */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {/* Map through active tab data and display optimization cards */}
-              {getActiveData().map((item) => (
+            {getActiveData().length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                No optimization recommendations available yet. Run optimization on your projects to see recommendations.
+              </div>
+            ) : (
+              <>
+                {/* Grid layout for optimization recommendation cards */}
+                <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                  {/* Map through active tab data and display optimization cards */}
+                  {getActiveData().map((item) => (
                 <Card key={item.id} className="overflow-hidden">
                   {/* Card header with resource name and change type icon */}
                   <CardHeader className="pb-2 flex flex-row justify-between items-start">
@@ -209,16 +131,18 @@ export function ResourceOptimizationTabs() {
                     <div className="text-xs text-gray-400">Project: {item.project}</div>
                   </CardContent>
                 </Card>
-              ))}
-            </div>
-            
-            {/* View all recommendations button */}
-            <div className="flex justify-end">
-              <Button variant="outline" size="sm">
-                View All Recommendations
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
-            </div>
+                  ))}
+                </div>
+                
+                {/* View all recommendations button */}
+                <div className="flex justify-end">
+                  <Button variant="outline" size="sm">
+                    View All Recommendations
+                    <ArrowRight className="ml-2 h-4 w-4" />
+                  </Button>
+                </div>
+              </>
+            )}
           </TabsContent>
         </Tabs>
       </CardContent>

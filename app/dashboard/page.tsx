@@ -55,6 +55,7 @@ import {
 import { ResourceAllocationChart } from "@/components/dashboard/resource-allocation-chart"
 import { ProjectStatusList } from "@/components/dashboard/project-status-list"
 import { ResourceOptimizationTabs } from "@/components/dashboard/resource-optimization-tabs"
+import { ProjectVisualizations } from "@/components/dashboard/project-visualizations"
 import { DashboardHeader } from "@/components/dashboard/dashboard-header"
 import { NewProjectDialog } from "@/components/dashboard/new-project-dialog"
 import { ExportReportDialog } from "@/components/dashboard/export-report-dialog"
@@ -77,26 +78,29 @@ export default function DashboardPage() {
   
   // Project list (fetched from Supabase only)
   const [projects, setProjects] = useState<any[]>([]);
+  const [projectsRefreshKey, setProjectsRefreshKey] = useState(0);
 
   // Load projects from Supabase on component mount (no local storage fallback)
-  useEffect(() => {
-    const loadProjects = async () => {
-      try {
-        const { projectsService } = await import('@/lib/data-service');
-        const userProjects = await projectsService.getProjects();
-        
-        // Convert to the format expected by the sidebar
-        const formattedProjects = userProjects.map(project => ({
-          id: project.id || '',
-          title: project.name
-        }));
-        
-        setProjects(formattedProjects);
-      } catch (error) {
-        console.error('Error loading projects:', error);
-      }
-    };
+  const loadProjects = async () => {
+    try {
+      const { projectsService } = await import('@/lib/data-service');
+      const userProjects = await projectsService.getProjects();
+      
+      // Convert to the format expected by the sidebar
+      const formattedProjects = userProjects.map(project => ({
+        id: project.id || '',
+        title: project.name
+      }));
+      
+      setProjects(formattedProjects);
+      // Trigger refresh of visualizations
+      setProjectsRefreshKey(prev => prev + 1);
+    } catch (error) {
+      console.error('Error loading projects:', error);
+    }
+  };
 
+  useEffect(() => {
     loadProjects();
   }, []);
 
@@ -123,19 +127,7 @@ export default function DashboardPage() {
 
   // Refresh projects list
   const refreshProjects = async () => {
-    try {
-      const { projectsService } = await import('@/lib/data-service');
-      const userProjects = await projectsService.getProjects();
-      
-      const formattedProjects = userProjects.map(project => ({
-        id: project.id || '',
-        title: project.name
-      }));
-      
-      setProjects(formattedProjects);
-    } catch (error) {
-      console.error('Error refreshing projects:', error);
-    }
+    await loadProjects();
   }
 
   // Export dashboard data as JSON file for reporting and analysis
@@ -169,9 +161,9 @@ export default function DashboardPage() {
 
   return (
     <SidebarProvider>
-      <div className="flex min-h-screen bg-gray-100 dark:bg-gray-900">
+      <div className="flex min-h-screen w-full bg-gray-100 dark:bg-gray-900">
         {/* Left Sidebar: Navigation and project management */}
-        <Sidebar className="border-r border-gray-200">
+        <Sidebar className="border-r border-gray-200 flex-shrink-0">
           {/* Sidebar header with OptiBuild branding */}
           <SidebarHeader className="border-b border-gray-200 p-4">
             <div className="flex items-center space-x-2">
@@ -287,9 +279,9 @@ export default function DashboardPage() {
         </Sidebar>
 
         {/* Main Content Area */}
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 flex flex-col min-w-0">
           {/* Top Header: Search, notifications, and user actions */}
-          <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 px-4 md:px-6">
+          <header className="sticky top-0 z-10 flex h-16 flex-shrink-0 items-center gap-2 sm:gap-4 border-b border-gray-200 bg-white dark:bg-gray-800 dark:border-gray-700 px-2 sm:px-4 md:px-6">
             {/* Sidebar trigger for mobile */}
             <SidebarTrigger />
             
@@ -311,21 +303,21 @@ export default function DashboardPage() {
               <Input
                 type="search"
                 placeholder="Search projects, resources..."
-                className="w-full rounded-md border border-gray-200 bg-white pl-8 shadow-none"
+                className="w-full rounded-md border border-gray-200 bg-white pl-8 shadow-none text-sm"
               />
             </div>
 
             {/* Right side header actions */}
-            <div className="ml-auto flex items-center gap-4">
+            <div className="ml-auto flex items-center gap-1 sm:gap-2 md:gap-4">
               {/* Theme toggle button (hidden on mobile) */}
               <Button
                 variant="outline"
                 size="icon"
                 onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-                className="hidden md:flex"
+                className="hidden md:flex h-9 w-9"
               >
-                <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                <Moon className="absolute h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+                <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+                <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
                 <span className="sr-only">Toggle theme</span>
               </Button>
 
@@ -333,16 +325,16 @@ export default function DashboardPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="hidden md:flex"
+                className="hidden md:flex text-xs sm:text-sm"
                 onClick={() => setIsExportDialogOpen(true)}
               >
-                <Download className="mr-2 h-4 w-4" />
-                Export
+                <Download className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden lg:inline">Export</span>
               </Button>
 
               {/* Notifications button with badge */}
-              <Button variant="outline" size="icon" className="relative" onClick={() => setIsNotificationsOpen(true)}>
-                <Bell className="h-5 w-5" />
+              <Button variant="outline" size="icon" className="relative h-9 w-9" onClick={() => setIsNotificationsOpen(true)}>
+                <Bell className="h-4 w-4" />
                 <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium text-white">
                   3
                 </span>
@@ -351,11 +343,12 @@ export default function DashboardPage() {
               {/* New project button (hidden on mobile) */}
               <Button
                 size="sm"
-                className="hidden md:flex bg-blue-600 hover:bg-blue-700"
+                className="hidden md:flex bg-blue-600 hover:bg-blue-700 text-xs sm:text-sm h-9"
                 onClick={() => setIsNewProjectDialogOpen(true)}
               >
-                <Plus className="mr-2 h-4 w-4" />
-                New Project
+                <Plus className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                <span className="hidden lg:inline">New Project</span>
+                <span className="lg:hidden">New</span>
               </Button>
 
               {/* User profile dropdown menu */}
@@ -405,27 +398,27 @@ export default function DashboardPage() {
           </header>
 
           {/* Main Dashboard Content */}
-          <main className="grid gap-4 p-4 md:gap-8 md:p-6">
-            {/* Dashboard header with filters and date range */}
-            <DashboardHeader
-              activeFilter={activeFilter}
-              setActiveFilter={setActiveFilter}
-              dateRange={dateRange}
-              setDateRange={setDateRange}
-            />
+          <main className="flex-1 overflow-y-auto overflow-x-hidden w-full min-h-0">
+            <div className="grid gap-2 sm:gap-3 md:gap-4 p-2 sm:p-3 md:p-4 lg:p-6 max-w-full pb-8">
+              {/* Dashboard header with filters and date range */}
+              <DashboardHeader
+                activeFilter={activeFilter}
+                setActiveFilter={setActiveFilter}
+                dateRange={dateRange}
+                setDateRange={setDateRange}
+              />
 
-            {/* Overview Cards: Key metrics and KPIs */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {/* Overview Cards: Key metrics and KPIs */}
+              <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
               {/* Active Projects card with animation */}
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium">Active Projects</CardTitle>
-                    <LineChart className="h-4 w-4 text-gray-500" />
+                <Card className="h-full flex flex-col">
+                  <CardHeader className="flex flex-row items-center justify-between pb-1.5 px-3 sm:px-4 pt-3 sm:pt-4 flex-shrink-0">
+                    <CardTitle className="text-xs sm:text-sm font-medium truncate pr-2">Active Projects</CardTitle>
+                    <LineChart className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500 flex-shrink-0" />
                   </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">{projects.length}</div>
-                    <p className="text-xs text-gray-500">&nbsp;</p>
+                  <CardContent className="px-3 sm:px-4 pb-3 sm:pb-4 flex-1 flex items-end">
+                    <div className="text-xl sm:text-2xl font-bold">{projects.length}</div>
                   </CardContent>
                 </Card>
               </motion.div>
@@ -436,15 +429,14 @@ export default function DashboardPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: 0.1 }}
               >
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium">Resource Utilization</CardTitle>
-                    <BarChart3 className="h-4 w-4 text-gray-500" />
+                <Card className="h-full flex flex-col">
+                  <CardHeader className="flex flex-row items-center justify-between pb-1.5 px-3 sm:px-4 pt-3 sm:pt-4 flex-shrink-0">
+                    <CardTitle className="text-xs sm:text-sm font-medium truncate pr-2">Resource Utilization</CardTitle>
+                    <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500 flex-shrink-0" />
                   </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">—</div>
-                    <Progress value={0} className="mt-2" />
-                    <p className="mt-1 text-xs text-gray-500">&nbsp;</p>
+                  <CardContent className="px-3 sm:px-4 pb-3 sm:pb-4 flex-1 flex flex-col justify-end">
+                    <div className="text-xl sm:text-2xl font-bold">—</div>
+                    <Progress value={0} className="mt-2 h-1.5" />
                   </CardContent>
                 </Card>
               </motion.div>
@@ -455,15 +447,14 @@ export default function DashboardPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: 0.2 }}
               >
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium">Delay Reduction</CardTitle>
-                    <Clock className="h-4 w-4 text-gray-500" />
+                <Card className="h-full flex flex-col">
+                  <CardHeader className="flex flex-row items-center justify-between pb-1.5 px-3 sm:px-4 pt-3 sm:pt-4 flex-shrink-0">
+                    <CardTitle className="text-xs sm:text-sm font-medium truncate pr-2">Delay Reduction</CardTitle>
+                    <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500 flex-shrink-0" />
                   </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">—</div>
-                    <Progress value={0} className="mt-2" />
-                    <p className="mt-1 text-xs text-gray-500">&nbsp;</p>
+                  <CardContent className="px-3 sm:px-4 pb-3 sm:pb-4 flex-1 flex flex-col justify-end">
+                    <div className="text-xl sm:text-2xl font-bold">—</div>
+                    <Progress value={0} className="mt-2 h-1.5" />
                   </CardContent>
                 </Card>
               </motion.div>
@@ -474,50 +465,60 @@ export default function DashboardPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.3, delay: 0.3 }}
               >
-                <Card>
-                  <CardHeader className="flex flex-row items-center justify-between pb-2">
-                    <CardTitle className="text-sm font-medium">Carbon Footprint</CardTitle>
-                    <Layers className="h-4 w-4 text-gray-500" />
+                <Card className="h-full flex flex-col">
+                  <CardHeader className="flex flex-row items-center justify-between pb-1.5 px-3 sm:px-4 pt-3 sm:pt-4 flex-shrink-0">
+                    <CardTitle className="text-xs sm:text-sm font-medium truncate pr-2">Carbon Footprint</CardTitle>
+                    <Layers className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500 flex-shrink-0" />
                   </CardHeader>
-                  <CardContent>
-                    <div className="text-2xl font-bold">—</div>
-                    <p className="text-xs text-gray-500 font-medium">&nbsp;</p>
+                  <CardContent className="px-3 sm:px-4 pb-3 sm:pb-4 flex-1 flex items-end">
+                    <div className="text-xl sm:text-2xl font-bold">—</div>
                   </CardContent>
                 </Card>
               </motion.div>
             </div>
 
-            {/* Main Dashboard Content Grid */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-7">
-              {/* Resource Allocation Chart: Visual representation of resource distribution */}
-              <motion.div
-                className="col-span-full lg:col-span-4"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.2 }}
-              >
-                <ResourceAllocationChart />
-              </motion.div>
+              {/* Main Dashboard Content Grid */}
+              <div className="grid gap-2 sm:gap-3 md:gap-4 grid-cols-1 lg:grid-cols-7">
+                {/* Resource Allocation Chart: Visual representation of resource distribution */}
+                <motion.div
+                  className="col-span-full lg:col-span-4 min-h-[300px] sm:min-h-[350px] lg:min-h-[400px]"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.2 }}
+                >
+                  <ResourceAllocationChart />
+                </motion.div>
 
-              {/* Project Status: List of projects with their current status */}
-              <motion.div
-                className="col-span-full lg:col-span-3"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.3 }}
-              >
-                <ProjectStatusList />
-              </motion.div>
+                {/* Project Status: List of projects with their current status */}
+                <motion.div
+                  className="col-span-full lg:col-span-3 min-h-[300px] sm:min-h-[350px] lg:min-h-[400px]"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.3 }}
+                >
+                  <ProjectStatusList />
+                </motion.div>
 
-              {/* Resource Optimization: Tabs for different optimization strategies */}
-              <motion.div
-                className="col-span-full"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5, delay: 0.4 }}
-              >
-                <ResourceOptimizationTabs />
-              </motion.div>
+                {/* Project Visualizations: Charts and graphs for projects */}
+                <motion.div
+                  className="col-span-full"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.4 }}
+                >
+                  <ProjectVisualizations key={projectsRefreshKey} />
+                </motion.div>
+
+                {/* Resource Optimization: Tabs for different optimization strategies */}
+                <motion.div
+                  className="col-span-full"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.5, delay: 0.5 }}
+                >
+                  <ResourceOptimizationTabs />
+                </motion.div>
+              </div>
             </div>
 
             {/* AI Chatbot: Interactive AI assistant for construction queries */}

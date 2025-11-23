@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import {
   BarChart3,
@@ -41,349 +41,12 @@ import { AddResourceDialog } from "@/components/resources/add-resource-dialog"
 import { ResourceDetailsDialog } from "@/components/resources/resource-details-dialog"
 import { format } from "date-fns"
 import Link from "next/link"
-
-// Mock data for resources
-const materials = [
-  {
-    id: 1,
-    name: "Cement (OPC 53 Grade)",
-    category: "Construction Materials",
-    quantity: 2500,
-    unit: "Bags",
-    available: 1800,
-    allocated: 1200,
-    supplier: {
-      name: "Ultratech Cement Ltd.",
-      contact: "+91 98765 43216",
-      email: "sales@ultratech.com",
-      address: "Bangalore, Karnataka"
-    },
-    lastUpdated: "2025-04-02",
-    status: "adequate",
-    cost: 380,
-    location: "Main Warehouse",
-  },
-  {
-    id: 2,
-    name: "TMT Steel Bars (12mm)",
-    category: "Construction Materials",
-    quantity: 15000,
-    unit: "Kg",
-    available: 8500,
-    allocated: 6500,
-    supplier: {
-      name: "JSW Steel Ltd.",
-      contact: "+91 98765 43215",
-      email: "orders@jswsteel.com",
-      address: "Mumbai, Maharashtra"
-    },
-    lastUpdated: "2025-04-01",
-    status: "adequate",
-    cost: 65,
-    location: "Steel Yard",
-  },
-  {
-    id: 3,
-    name: "Bricks (Red Clay)",
-    category: "Construction Materials",
-    quantity: 50000,
-    unit: "Pieces",
-    available: 22000,
-    allocated: 28000,
-    supplier: {
-      name: "Lakshmi Brick Works",
-      contact: "+91 98765 43221",
-      email: "orders@lakshmibricks.com",
-      address: "Bangalore Rural, Karnataka"
-    },
-    lastUpdated: "2025-03-28",
-    status: "low",
-    cost: 8,
-    location: "Site Storage",
-  },
-  {
-    id: 4,
-    name: "Sand (River)",
-    category: "Construction Materials",
-    quantity: 500,
-    unit: "Cubic Meters",
-    available: 120,
-    allocated: 380,
-    supplier: {
-      name: "Krishna River Aggregates",
-      contact: "+91 98765 43214",
-      email: "sales@krishnaaggregates.com",
-      address: "Bangalore, Karnataka"
-    },
-    lastUpdated: "2025-03-30",
-    status: "low",
-    cost: 1800,
-    location: "Sand Depot",
-  },
-  {
-    id: 5,
-    name: "Ready Mix Concrete (M25)",
-    category: "Construction Materials",
-    quantity: 350,
-    unit: "Cubic Meters",
-    available: 350,
-    allocated: 0,
-    supplier: {
-      name: "RMC India Ltd.",
-      contact: "+91 98765 43213",
-      email: "sales@rmcindia.com",
-      address: "Bangalore, Karnataka"
-    },
-    lastUpdated: "2025-04-03",
-    status: "adequate",
-    cost: 6500,
-    location: "On Demand",
-  },
-  {
-    id: 6,
-    name: "Electrical Wiring (2.5 sq mm)",
-    category: "Electrical",
-    quantity: 8000,
-    unit: "Meters",
-    available: 5200,
-    allocated: 2800,
-    supplier: {
-      name: "Havells India Ltd.",
-      contact: "+91 98765 43212",
-      email: "sales@havells.com",
-      address: "Bangalore, Karnataka"
-    },
-    lastUpdated: "2025-03-25",
-    status: "adequate",
-    cost: 28,
-    location: "Electrical Store",
-  },
-  {
-    id: 7,
-    name: "PVC Pipes (4 inch)",
-    category: "Plumbing",
-    quantity: 1200,
-    unit: "Meters",
-    available: 450,
-    allocated: 750,
-    supplier: {
-      name: "Finolex Pipes Ltd.",
-      contact: "+91 98765 43211",
-      email: "sales@finolexpipes.com",
-      address: "Bangalore, Karnataka"
-    },
-    lastUpdated: "2025-03-22",
-    status: "low",
-    cost: 180,
-    location: "Plumbing Store",
-  },
-]
-
-const equipment = [
-  {
-    id: 1,
-    name: "Excavator (JCB 3DX)",
-    category: "Heavy Machinery",
-    quantity: 3,
-    available: 1,
-    allocated: 2,
-    condition: "good",
-    lastMaintenance: "2025-03-15",
-    nextMaintenance: "2025-05-15",
-    operator: "Ramesh Yadav",
-    location: "Lakshmi Tech Park",
-    dailyRate: 12000,
-    vendor: {
-      name: "JCB",
-      contact: "+91 98765 43210",
-      email: "sales@jcb.com",
-      address: "Bangalore, Karnataka"
-    },
-    status: "Partially Available",
-  },
-  {
-    id: 2,
-    name: "Concrete Mixer (7/5)",
-    category: "Construction Equipment",
-    quantity: 5,
-    available: 2,
-    allocated: 3,
-    condition: "fair",
-    lastMaintenance: "2025-03-10",
-    nextMaintenance: "2025-04-10",
-    operator: "Various",
-    location: "Equipment Yard",
-    dailyRate: 2500,
-    vendor: {
-      name: "Schwing Stetter",
-      contact: "+91 98765 43209",
-      email: "support@schwing.co.in",
-      address: "Chennai, Tamil Nadu"
-    },
-    status: "Available",
-  },
-  {
-    id: 3,
-    name: "Tower Crane (Potain MCT 85)",
-    category: "Heavy Machinery",
-    quantity: 1,
-    available: 0,
-    allocated: 1,
-    condition: "excellent",
-    lastMaintenance: "2025-03-20",
-    nextMaintenance: "2025-05-20",
-    operator: "Sunil Patil",
-    location: "Lakshmi Tech Park",
-    dailyRate: 25000,
-    vendor: {
-      name: "Potain",
-      contact: "+91 98765 43208",
-      email: "rentals@potain.com",
-      address: "Delhi, NCR"
-    },
-    status: "All Allocated",
-  },
-  {
-    id: 4,
-    name: "Concrete Pump",
-    category: "Construction Equipment",
-    quantity: 2,
-    available: 1,
-    allocated: 1,
-    condition: "good",
-    lastMaintenance: "2025-03-25",
-    nextMaintenance: "2025-04-25",
-    operator: "Ajay Kumar",
-    location: "Ganga Residency",
-    dailyRate: 8000,
-    vendor: {
-      name: "Schwing Stetter",
-      contact: "+91 98765 43207",
-      email: "support@schwing.co.in",
-      address: "Chennai, Tamil Nadu"
-    },
-    status: "Available",
-  },
-  {
-    id: 5,
-    name: "Generator (100 KVA)",
-    category: "Power Equipment",
-    quantity: 4,
-    available: 1,
-    allocated: 3,
-    condition: "good",
-    lastMaintenance: "2025-03-18",
-    nextMaintenance: "2025-04-18",
-    operator: "Various",
-    location: "Multiple Sites",
-    dailyRate: 5000,
-    vendor: {
-      name: "Generators India",
-      contact: "+91 98765 43206",
-      email: "sales@generatorsindia.com",
-      address: "Bangalore, Karnataka"
-    },
-    status: "Partially Available",
-  },
-  {
-    id: 6,
-    name: "Scaffolding Set",
-    category: "Construction Equipment",
-    quantity: 20,
-    available: 5,
-    allocated: 15,
-    condition: "fair",
-    lastMaintenance: "2025-03-05",
-    nextMaintenance: "2025-05-05",
-    operator: "N/A",
-    location: "Equipment Yard",
-    dailyRate: 1200,
-    vendor: {
-      name: "Scaffolders India",
-      contact: "+91 98765 43205",
-      email: "sales@scaffoldersindia.com",
-      address: "Bangalore, Karnataka"
-    },
-    status: "Available",
-  },
-]
-
-const labor = [
-  {
-    id: 1,
-    name: "Skilled Masons",
-    category: "Skilled Labor",
-    quantity: 25,
-    available: 8,
-    allocated: 17,
-    supervisor: "Rajesh Kumar",
-    contact: "+91 98765 43230",
-    location: "Multiple Sites",
-    dailyWage: 850,
-  },
-  {
-    id: 2,
-    name: "Carpenters",
-    category: "Skilled Labor",
-    quantity: 15,
-    available: 3,
-    allocated: 12,
-    supervisor: "Mohan Singh",
-    contact: "+91 98765 43231",
-    location: "Multiple Sites",
-    dailyWage: 900,
-  },
-  {
-    id: 3,
-    name: "Electricians",
-    category: "Skilled Labor",
-    quantity: 12,
-    available: 4,
-    allocated: 8,
-    supervisor: "Anand Sharma",
-    contact: "+91 98765 43232",
-    location: "Multiple Sites",
-    dailyWage: 950,
-  },
-  {
-    id: 4,
-    name: "Plumbers",
-    category: "Skilled Labor",
-    quantity: 10,
-    available: 2,
-    allocated: 8,
-    supervisor: "Suresh Patel",
-    contact: "+91 98765 43233",
-    location: "Multiple Sites",
-    dailyWage: 900,
-  },
-  {
-    id: 5,
-    name: "General Workers",
-    category: "Unskilled Labor",
-    quantity: 50,
-    available: 12,
-    allocated: 38,
-    supervisor: "Vikram Singh",
-    contact: "+91 98765 43234",
-    location: "Multiple Sites",
-    dailyWage: 600,
-  },
-  {
-    id: 6,
-    name: "Painters",
-    category: "Skilled Labor",
-    quantity: 8,
-    available: 5,
-    allocated: 3,
-    supervisor: "Deepak Joshi",
-    contact: "+91 98765 43235",
-    location: "Ganesh Shopping Mall",
-    dailyWage: 850,
-  },
-]
+import { resourcesCatalogService } from "@/lib/data-service"
+import { useAuth } from "@/contexts/AuthContext"
+import { toast } from "sonner"
 
 export default function ResourcesPage() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("materials")
   const [searchQuery, setSearchQuery] = useState("")
   const [sortColumn, setSortColumn] = useState("name")
@@ -391,6 +54,44 @@ export default function ResourcesPage() {
   const [isAddResourceDialogOpen, setIsAddResourceDialogOpen] = useState(false)
   const [selectedResource, setSelectedResource] = useState<any>(null)
   const [isResourceDetailsOpen, setIsResourceDetailsOpen] = useState(false)
+  const [resources, setResources] = useState<{
+    materials: any[]
+    equipment: any[]
+    labor: any[]
+  }>({
+    materials: [],
+    equipment: [],
+    labor: []
+  })
+  const [isLoading, setIsLoading] = useState(true)
+
+  // Load resources from Supabase
+  useEffect(() => {
+    const loadResources = async () => {
+      if (!user) return
+      
+      try {
+        setIsLoading(true)
+        const allResources = await resourcesCatalogService.getResources()
+        
+        // Categorize resources by type
+        const categorized = {
+          materials: allResources.filter((r: any) => r.type === 'material' || r.type === 'materials'),
+          equipment: allResources.filter((r: any) => r.type === 'equipment'),
+          labor: allResources.filter((r: any) => r.type === 'labor' || r.type === 'labour')
+        }
+        
+        setResources(categorized)
+      } catch (error) {
+        console.error('Error loading resources:', error)
+        setResources({ materials: [], equipment: [], labor: [] })
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadResources()
+  }, [user])
 
   const handleSort = (column: string) => {
     if (sortColumn === column) {
@@ -420,10 +121,9 @@ export default function ResourcesPage() {
     return sortData(
       data.filter(
         (item) =>
-          item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          item.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (item.supplier && item.supplier.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
-          (item.location && item.location.toLowerCase().includes(searchQuery.toLowerCase())),
+          (item.name && item.name.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (item.type && item.type.toLowerCase().includes(searchQuery.toLowerCase())) ||
+          (item.description && item.description.toLowerCase().includes(searchQuery.toLowerCase())),
       ),
     )
   }
@@ -481,49 +181,60 @@ export default function ResourcesPage() {
 
   const handleExportResources = (resourceType?: string) => {
     // Determine which resources to export
-    let dataToExport;
+    let dataToExport: any[] = [];
     const type = resourceType || activeTab;
     
     switch (type) {
       case "materials":
-        dataToExport = materials;
+        dataToExport = resources.materials || [];
         break;
       case "equipment":
-        dataToExport = equipment;
+        dataToExport = resources.equipment || [];
         break;
       case "labor":
-        dataToExport = labor;
+        dataToExport = resources.labor || [];
         break;
       default:
-        dataToExport = materials; // Default to materials if type not specified
+        dataToExport = resources.materials || [];
     }
 
     // Convert to CSV format
-    const headers = ['Name', 'Type', 'Status', 'Quantity', 'Unit Cost', 'Total Cost', 'Last Updated'];
-    const csvContent = [
-      headers.join(','),
-      ...dataToExport.map(item => [
-        item.name,
-        item.category,
-        item.status,
-        item.quantity,
-        item.cost,
-        item.quantity * item.cost,
-        item.lastUpdated
-      ].join(','))
-    ].join('\n');
+    const headers = ['Name', 'Type', 'Unit', 'Base Cost', 'Description'];
+    const rows = dataToExport.map((item: any) => {
+      const row = [
+        item.name || '',
+        item.type || '',
+        item.unit || '',
+        item.base_cost || 0,
+        (item.description || '').replace(/,/g, ';')
+      ];
+      return row.join(',');
+    });
+    const csvContent = [headers.join(','), ...rows].join('\n');
 
     // Create and download the file
     const blob = new Blob([csvContent], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${type}-resources-${format(new Date(), 'yyyy-MM-dd')}.csv`;
+    const dateStr = format(new Date(), 'yyyy-MM-dd');
+    a.download = `${type}-resources-${dateStr}.csv`;
     document.body.appendChild(a);
     a.click();
     window.URL.revokeObjectURL(url);
     document.body.removeChild(a);
-  };
+  }
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-500">Loading resources...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -570,9 +281,9 @@ export default function ResourcesPage() {
                 <Package className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-foreground">{materials.length} Types</div>
+                <div className="text-2xl font-bold text-foreground">{resources.materials.length} Types</div>
                 <p className="text-xs text-muted-foreground">
-                  {materials.reduce((sum, item) => sum + item.quantity, 0)} Total Units
+                  {resources.materials.length} Resources
                 </p>
               </CardContent>
             </Card>
@@ -589,9 +300,9 @@ export default function ResourcesPage() {
                 <Wrench className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-foreground">{equipment.length} Types</div>
+                <div className="text-2xl font-bold text-foreground">{resources.equipment.length} Types</div>
                 <p className="text-xs text-muted-foreground">
-                  {equipment.reduce((sum, item) => sum + item.quantity, 0)} Total Units
+                  {resources.equipment.length} Resources
                 </p>
               </CardContent>
             </Card>
@@ -608,9 +319,9 @@ export default function ResourcesPage() {
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-foreground">{labor.length} Teams</div>
+                <div className="text-2xl font-bold text-foreground">{resources.labor.length} Teams</div>
                 <p className="text-xs text-muted-foreground">
-                  {labor.reduce((sum, item) => sum + item.quantity, 0)} Total Workers
+                  {resources.labor.length} Resources
                 </p>
               </CardContent>
             </Card>
@@ -629,8 +340,9 @@ export default function ResourcesPage() {
               <CardContent>
                 <div className="text-2xl font-bold text-foreground">
                   {formatCurrency(
-                    materials.reduce((sum, item) => sum + item.quantity * item.cost, 0) +
-                      equipment.reduce((sum, item) => sum + item.quantity * item.dailyRate * 30, 0),
+                    (resources.materials || []).reduce((sum: number, item: any) => sum + (item.base_cost || 0), 0) +
+                      (resources.equipment || []).reduce((sum: number, item: any) => sum + (item.base_cost || 0), 0) +
+                      (resources.labor || []).reduce((sum: number, item: any) => sum + (item.base_cost || 0), 0),
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">Estimated inventory value</p>
@@ -668,9 +380,9 @@ export default function ResourcesPage() {
                       <TableHead className="cursor-pointer text-foreground" onClick={() => handleSort("name")}>
                         <div className="flex items-center">Name</div>
                       </TableHead>
-                      <TableHead className="text-foreground">Category</TableHead>
-                      <TableHead className="text-foreground">Quantity</TableHead>
-                      <TableHead className="text-foreground">Availability</TableHead>
+                      <TableHead className="text-foreground">Type</TableHead>
+                      <TableHead className="text-foreground">Unit</TableHead>
+                      <TableHead className="text-foreground">Cost</TableHead>
                       <TableHead className="text-foreground">Status</TableHead>
                       <TableHead className="text-foreground">Supplier</TableHead>
                       <TableHead className="text-foreground">Contact</TableHead>
@@ -678,27 +390,34 @@ export default function ResourcesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filterData(materials).map((material) => (
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8">Loading resources...</TableCell>
+                      </TableRow>
+                    ) : filterData(resources.materials || []).length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8 text-gray-500">No materials found. Add resources to get started.</TableCell>
+                      </TableRow>
+                    ) : (
+                      filterData(resources.materials || []).map((material) => (
                       <TableRow key={material.id}>
                         <TableCell className="font-medium text-foreground">{material.name}</TableCell>
-                        <TableCell className="text-foreground">{material.category}</TableCell>
+                        <TableCell className="text-foreground">{material.type || 'Material'}</TableCell>
                         <TableCell className="text-foreground">
-                          {material.quantity} {material.unit}
+                          {material.unit || 'N/A'}
                         </TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
-                            <Progress value={(material.available / material.quantity) * 100} className="h-2" />
+                            <Progress value={100} className="h-2" />
                             <div className="text-xs text-muted-foreground">
-                              {material.available} available / {material.allocated} allocated
+                              Base Cost: ₹{material.base_cost?.toLocaleString() || '0'}
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>{getStatusBadge(material.status)}</TableCell>
-                        <TableCell className="text-foreground">{material.supplier.name}</TableCell>
+                        <TableCell>{getStatusBadge('adequate')}</TableCell>
+                        <TableCell className="text-foreground">N/A</TableCell>
                         <TableCell>
-                          <a href={`tel:${material.supplier.contact}`} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300">
-                            {material.supplier.contact}
-                          </a>
+                          <span className="text-gray-500">N/A</span>
                         </TableCell>
                         <TableCell className="text-right text-foreground">
                           <DropdownMenu>
@@ -731,7 +450,8 @@ export default function ResourcesPage() {
                           </DropdownMenu>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </TabsContent>
@@ -741,9 +461,9 @@ export default function ResourcesPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Name</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Quantity</TableHead>
-                      <TableHead>Availability</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Unit</TableHead>
+                      <TableHead>Cost</TableHead>
                       <TableHead>Condition</TableHead>
                       <TableHead>Vendor</TableHead>
                       <TableHead>Contact</TableHead>
@@ -751,25 +471,32 @@ export default function ResourcesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filterData(equipment).map((item) => (
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center py-8">Loading resources...</TableCell>
+                      </TableRow>
+                    ) : filterData(resources.equipment || []).length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={9} className="text-center py-8 text-gray-500">No equipment found. Add resources to get started.</TableCell>
+                      </TableRow>
+                    ) : (
+                      filterData(resources.equipment || []).map((item) => (
                       <TableRow key={item.id}>
                         <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell>{item.category}</TableCell>
-                        <TableCell>{item.quantity} Units</TableCell>
+                        <TableCell>{item.type || 'Equipment'}</TableCell>
+                        <TableCell>{item.unit || 'N/A'}</TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
-                            <Progress value={(item.available / item.quantity) * 100} className="h-2" />
+                            <Progress value={100} className="h-2" />
                             <div className="text-xs text-gray-500">
-                              {item.available} available / {item.allocated} allocated
+                              Base Cost: ₹{item.base_cost?.toLocaleString() || '0'}
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>{getConditionBadge(item.condition)}</TableCell>
-                        <TableCell>{item.vendor.name}</TableCell>
+                        <TableCell>{getConditionBadge('good')}</TableCell>
+                        <TableCell>N/A</TableCell>
                         <TableCell>
-                          <a href={`tel:${item.vendor.contact}`} className="text-blue-600 hover:text-blue-800">
-                            {item.vendor.contact}
-                          </a>
+                          <span className="text-gray-500">N/A</span>
                         </TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
@@ -802,7 +529,8 @@ export default function ResourcesPage() {
                           </DropdownMenu>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    ))
+                    )}
                   </TableBody>
                 </Table>
               </TabsContent>
@@ -812,9 +540,9 @@ export default function ResourcesPage() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Team</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Workers</TableHead>
-                      <TableHead>Availability</TableHead>
+                      <TableHead>Type</TableHead>
+                      <TableHead>Unit</TableHead>
+                      <TableHead>Cost</TableHead>
                       <TableHead>Supervisor</TableHead>
                       <TableHead>Contact</TableHead>
                       <TableHead>Daily Wage</TableHead>
@@ -822,26 +550,33 @@ export default function ResourcesPage() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {filterData(labor).map((item) => (
+                    {isLoading ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8">Loading resources...</TableCell>
+                      </TableRow>
+                    ) : filterData(resources.labor || []).length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={8} className="text-center py-8 text-gray-500">No labor teams found. Add resources to get started.</TableCell>
+                      </TableRow>
+                    ) : (
+                      filterData(resources.labor || []).map((item) => (
                       <TableRow key={item.id}>
                         <TableCell className="font-medium">{item.name}</TableCell>
-                        <TableCell>{item.category}</TableCell>
-                        <TableCell>{item.quantity} Workers</TableCell>
+                        <TableCell>{item.type || 'Labor'}</TableCell>
+                        <TableCell>{item.unit || 'N/A'}</TableCell>
                         <TableCell>
                           <div className="flex flex-col gap-1">
-                            <Progress value={(item.available / item.quantity) * 100} className="h-2" />
+                            <Progress value={100} className="h-2" />
                             <div className="text-xs text-gray-500">
-                              {item.available} available / {item.allocated} allocated
+                              Base Cost: ₹{item.base_cost?.toLocaleString() || '0'}
                             </div>
                           </div>
                         </TableCell>
-                        <TableCell>{item.supervisor}</TableCell>
+                        <TableCell>N/A</TableCell>
                         <TableCell>
-                          <a href={`tel:${item.contact}`} className="text-blue-600 hover:text-blue-800">
-                            {item.contact}
-                          </a>
+                          <span className="text-gray-500">N/A</span>
                         </TableCell>
-                        <TableCell>{formatCurrency(item.dailyWage)}</TableCell>
+                        <TableCell>{formatCurrency(item.base_cost || 0)}</TableCell>
                         <TableCell className="text-right">
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -873,7 +608,8 @@ export default function ResourcesPage() {
                           </DropdownMenu>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      ))
+                    )}
                   </TableBody>
                 </Table>
               </TabsContent>
@@ -884,8 +620,62 @@ export default function ResourcesPage() {
         {/* Dialogs */}
         <AddResourceDialog
           open={isAddResourceDialogOpen}
-          onOpenChange={setIsAddResourceDialogOpen}
+          onOpenChange={(open) => {
+            setIsAddResourceDialogOpen(open)
+            if (!open) {
+              // Reload resources when dialog closes (resource might have been added)
+              const loadResources = async () => {
+                if (!user) return
+                
+                try {
+                  setIsLoading(true)
+                  const allResources = await resourcesCatalogService.getResources()
+                  
+                  // Categorize resources by type
+                  const categorized = {
+                    materials: allResources.filter((r: any) => r.type === 'material'),
+                    equipment: allResources.filter((r: any) => r.type === 'equipment'),
+                    labor: allResources.filter((r: any) => r.type === 'labour'),
+                  }
+                  
+                  setResources(categorized)
+                } catch (error) {
+                  console.error('Error loading resources:', error)
+                  toast.error('Failed to load resources')
+                } finally {
+                  setIsLoading(false)
+                }
+              }
+              loadResources()
+            }
+          }}
           resourceType={activeTab}
+          onResourceAdded={() => {
+            // Reload resources after adding
+            const loadResources = async () => {
+              if (!user) return
+              
+              try {
+                setIsLoading(true)
+                const allResources = await resourcesCatalogService.getResources()
+                
+                // Categorize resources by type
+                const categorized = {
+                  materials: allResources.filter((r: any) => r.type === 'material'),
+                  equipment: allResources.filter((r: any) => r.type === 'equipment'),
+                  labor: allResources.filter((r: any) => r.type === 'labour'),
+                }
+                
+                setResources(categorized)
+              } catch (error) {
+                console.error('Error loading resources:', error)
+                toast.error('Failed to load resources')
+              } finally {
+                setIsLoading(false)
+              }
+            }
+            loadResources()
+          }}
         />
 
         {selectedResource && (

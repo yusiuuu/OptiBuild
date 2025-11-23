@@ -8,136 +8,41 @@ import { Badge } from "@/components/ui/badge"
 import { Clock } from "lucide-react"
 import Link from "next/link"
 
-// Default project data for demonstration purposes
-// Provides sample construction projects with detailed information when no projects exist in localStorage
-const defaultProjects = [
-  {
-    id: "office-tower-phase-1",
-    title: "Office Tower Phase 1",
-    progress: 75,
-    status: "on-track",
-    dueDate: "2025-06-15",
-    budget: "₹42 Cr",
-    budgetStatus: "on-budget",
-    supervisor: "Rajesh Kumar",
-    teamMembers: [
-      { name: "Priya Sharma", role: "Project Manager", department: "Construction" },
-      { name: "Amit Patel", role: "Site Engineer", department: "Civil" },
-      { name: "Neha Gupta", role: "Architect", department: "Design" },
-      { name: "Vikram Singh", role: "Quality Inspector", department: "Quality" }
-    ],
-    resources: {
-      materials: [
-        { name: "Steel", quantity: "2500 tons", status: "In Stock" },
-        { name: "Cement", quantity: "15000 bags", status: "In Stock" },
-        { name: "Glass Panels", quantity: "5000 sq ft", status: "Ordered" }
-      ],
-      equipment: [
-        { name: "Tower Crane", quantity: "2", status: "Operational" },
-        { name: "Concrete Pump", quantity: "3", status: "Operational" },
-        { name: "Excavator", quantity: "2", status: "Maintenance" }
-      ]
-    },
-    milestones: [
-      { title: "Foundation Complete", date: "2024-12-15", status: "Completed" },
-      { title: "Structural Work", date: "2025-03-30", status: "In Progress" },
-      { title: "Interior Finishing", date: "2025-05-15", status: "Pending" }
-    ]
-  },
-  {
-    id: "residential-complex",
-    title: "Residential Complex",
-    progress: 45,
-    status: "delayed",
-    dueDate: "2025-08-30",
-    budget: "₹68 Cr",
-    budgetStatus: "under",
-    supervisor: "Meera Reddy",
-    teamMembers: [
-      { name: "Arjun Nair", role: "Project Manager", department: "Construction" },
-      { name: "Sanya Verma", role: "Civil Engineer", department: "Civil" },
-      { name: "Karthik Iyer", role: "MEP Engineer", department: "MEP" },
-      { name: "Divya Rao", role: "Safety Officer", department: "Safety" }
-    ],
-    resources: {
-      materials: [
-        { name: "Bricks", quantity: "500000", status: "In Stock" },
-        { name: "Steel Bars", quantity: "1800 tons", status: "In Stock" },
-        { name: "Tiles", quantity: "25000 sq ft", status: "Ordered" }
-      ],
-      equipment: [
-        { name: "Mobile Crane", quantity: "1", status: "Operational" },
-        { name: "Concrete Mixer", quantity: "4", status: "Operational" },
-        { name: "Scaffolding", quantity: "1000 sq ft", status: "In Stock" }
-      ]
-    },
-    milestones: [
-      { title: "Site Preparation", date: "2024-11-30", status: "Completed" },
-      { title: "Foundation Work", date: "2025-02-15", status: "In Progress" },
-      { title: "Superstructure", date: "2025-06-30", status: "Pending" }
-    ]
-  },
-  {
-    id: "highway-extension",
-    title: "Highway Extension",
-    progress: 90,
-    status: "on-track",
-    dueDate: "2025-04-20",
-    budget: "₹125 Cr",
-    budgetStatus: "over",
-    supervisor: "Suresh Menon",
-    teamMembers: [
-      { name: "Anita Desai", role: "Project Manager", department: "Highways" },
-      { name: "Rahul Joshi", role: "Road Engineer", department: "Civil" },
-      { name: "Deepak Malhotra", role: "Surveyor", department: "Survey" },
-      { name: "Lakshmi Priya", role: "Environmental Officer", department: "Environment" }
-    ],
-    resources: {
-      materials: [
-        { name: "Asphalt", quantity: "8000 tons", status: "In Stock" },
-        { name: "Concrete", quantity: "12000 cubic meters", status: "In Stock" },
-        { name: "Steel Reinforcement", quantity: "3000 tons", status: "In Stock" }
-      ],
-      equipment: [
-        { name: "Road Roller", quantity: "3", status: "Operational" },
-        { name: "Asphalt Paver", quantity: "2", status: "Operational" },
-        { name: "Excavator", quantity: "4", status: "Operational" }
-      ]
-    },
-    milestones: [
-      { title: "Earthwork Complete", date: "2024-12-30", status: "Completed" },
-      { title: "Base Layer", date: "2025-02-28", status: "Completed" },
-      { title: "Final Layer", date: "2025-04-15", status: "In Progress" }
-    ]
-  }
-]
-
 // Project status list component for dashboard overview
 // Displays current status, progress, and key metrics for all active construction projects
 export function ProjectStatusList() {
-  // State to store project data, initialized with default projects
-  const [projects, setProjects] = useState(defaultProjects)
+  // State to store project data from Supabase
+  const [projects, setProjects] = useState<any[]>([])
+  const [isLoading, setIsLoading] = useState(true)
 
-  // Load projects from localStorage on component mount
-  // Merges stored projects with default ones, avoiding duplicates
+  // Load projects from Supabase on component mount
   useEffect(() => {
-    const storedProjects = localStorage.getItem('projects')
-    if (storedProjects) {
-      const parsedProjects = JSON.parse(storedProjects)
-      // Merge with default projects, avoiding duplicates
-      const mergedProjects = [...defaultProjects]
-      parsedProjects.forEach((newProject: any) => {
-        if (!mergedProjects.find(p => p.id === newProject.id)) {
-          mergedProjects.push({
-            ...newProject,
-            progress: newProject.completion || 0,
-            status: getProjectStatus(newProject.completion || 0),
-            budgetStatus: 'on-budget' // Default for new projects
-          })
-        }
-      })
-      setProjects(mergedProjects)
+    const loadProjects = async () => {
+      try {
+        const { projectsService } = await import('@/lib/data-service')
+        const userProjects = await projectsService.getProjects()
+        
+        // Format projects for display
+        const formattedProjects = userProjects.map((project: any) => ({
+          id: project.id,
+          title: project.name,
+          progress: project.progress || 0,
+          status: getProjectStatus(project.progress || 0),
+          dueDate: project.end_date || project.start_date,
+          budget: project.budget ? `₹${(project.budget / 10000000).toFixed(1)} Cr` : 'N/A',
+          budgetStatus: 'on-budget' // Can be calculated from expenses if needed
+        }))
+        
+        setProjects(formattedProjects)
+      } catch (error) {
+        console.error('Error loading projects:', error)
+        setProjects([])
+      } finally {
+        setIsLoading(false)
+      }
     }
+
+    loadProjects()
   }, [])
 
   // Determine project status based on completion percentage
@@ -192,55 +97,61 @@ export function ProjectStatusList() {
   }
 
   return (
-    <Card className="h-full">
+    <Card className="h-full flex flex-col w-full">
       {/* Card header with title and description */}
-      <CardHeader>
-        <CardTitle>Project Status</CardTitle>
-        <CardDescription>Current status of active projects</CardDescription>
+      <CardHeader className="px-3 sm:px-4 pt-3 sm:pt-4 pb-2 sm:pb-3 flex-shrink-0">
+        <CardTitle className="text-sm sm:text-base">Project Status</CardTitle>
+        <CardDescription className="text-xs hidden sm:block">Current status of active projects</CardDescription>
       </CardHeader>
       
       {/* Card content with project list */}
-      <CardContent>
-        <div className="space-y-6">
-          {/* Map through all projects and display their status information */}
-          {projects.map((project) => (
-            <div key={project.id} className="space-y-2">
-              {/* Project title and status badge row */}
-              <div className="flex items-center justify-between">
-                <Link 
-                  href={`/dashboard/projects/${project.id}`}
-                  className="font-medium hover:text-blue-600 transition-colors"
-                >
-                  {project.title}
-                </Link>
-                {getStatusBadge(project.status)}
-              </div>
-              
-              {/* Due date and progress percentage row */}
-              <div className="flex items-center justify-between text-sm text-gray-500 mb-1">
-                <div className="flex items-center">
-                  <Clock className="mr-1 h-3 w-3" />
-                  Due: {new Date(project.dueDate).toLocaleDateString()}
+      <CardContent className="px-3 sm:px-4 pb-3 sm:pb-4 flex-1 min-h-0 overflow-hidden flex flex-col">
+        {isLoading ? (
+          <div className="text-center py-6 text-gray-500 text-sm">Loading projects...</div>
+        ) : projects.length === 0 ? (
+          <div className="text-center py-6 text-gray-500 text-sm">No projects found. Create a new project to get started.</div>
+        ) : (
+          <div className="space-y-3 flex-1 overflow-y-auto min-h-0">
+            {/* Map through all projects and display their status information */}
+            {projects.map((project) => (
+              <div key={project.id} className="space-y-1.5 pb-2 border-b last:border-0">
+                {/* Project title and status badge row */}
+                <div className="flex items-center justify-between">
+                  <Link 
+                    href={`/dashboard/projects/${project.id}`}
+                    className="font-medium text-sm hover:text-blue-600 transition-colors truncate flex-1 mr-2"
+                  >
+                    {project.title}
+                  </Link>
+                  {getStatusBadge(project.status)}
                 </div>
-                <div>{project.progress}%</div>
+                
+                {/* Due date and progress percentage row */}
+                <div className="flex items-center justify-between text-xs text-gray-500">
+                  <div className="flex items-center">
+                    <Clock className="mr-1 h-3 w-3" />
+                    {project.dueDate ? new Date(project.dueDate).toLocaleDateString() : 'No due date'}
+                  </div>
+                  <div className="font-medium">{project.progress}%</div>
+                </div>
+                
+                {/* Progress bar showing completion percentage */}
+                <Progress value={project.progress} className="h-1.5" />
+                
+                {/* Budget information and status row */}
+                <div className="flex justify-between items-center">
+                  <div className="text-xs">Budget: {project.budget}</div>
+                  {getBudgetStatusBadge(project.budgetStatus)}
+                </div>
               </div>
-              
-              {/* Progress bar showing completion percentage */}
-              <Progress value={project.progress} className="h-2" />
-              
-              {/* Budget information and status row */}
-              <div className="flex justify-between items-center mt-2">
-                <div className="text-sm">Budget: {project.budget}</div>
-                {getBudgetStatusBadge(project.budgetStatus)}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </CardContent>
       
       {/* Card footer with refresh button */}
-      <CardFooter>
-        <Button variant="outline" className="w-full" onClick={() => window.location.reload()}>
+      <CardFooter className="px-3 sm:px-4 pb-3 sm:pb-4 pt-2 sm:pt-3 flex-shrink-0">
+        <Button variant="outline" size="sm" className="w-full text-xs sm:text-sm h-8 sm:h-9" onClick={() => window.location.reload()}>
           Refresh Projects
         </Button>
       </CardFooter>

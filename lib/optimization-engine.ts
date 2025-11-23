@@ -222,8 +222,24 @@ export class OptimizationEngine {
   ): Promise<OptimizationResult> {
     console.log(`Running what-if analysis: ${scenarioType}`)
     
-    let modifiedTasks = [...(baseScenario.input_parameters.tasks as Task[])]
-    let modifiedResources = [...(baseScenario.input_parameters.resources as Resource[])]
+    // Validate input parameters exist
+    if (!baseScenario.input_parameters) {
+      throw new Error('Base scenario missing input parameters. Please run optimization first or ensure the scenario includes tasks and resources.')
+    }
+    
+    // Safely extract tasks and resources with defaults
+    const baseTasks = baseScenario.input_parameters.tasks || []
+    const baseResources = baseScenario.input_parameters.resources || []
+    
+    if (!Array.isArray(baseTasks) || baseTasks.length === 0) {
+      throw new Error('Invalid or empty tasks data in base scenario. Please ensure tasks are available.')
+    }
+    if (!Array.isArray(baseResources) || baseResources.length === 0) {
+      throw new Error('Invalid or empty resources data in base scenario. Please ensure resources are available.')
+    }
+    
+    let modifiedTasks = [...(baseTasks as Task[])]
+    let modifiedResources = [...(baseResources as Resource[])]
     
     // Apply scenario modifications
     switch (scenarioType) {

@@ -25,7 +25,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={`${inter.className} pt-8`}>
+      <body className={`${inter.className}`}>
         {/* AuthProvider: Manages authentication state across the entire application */}
         <AuthProvider>
           {/* ThemeProvider: Handles theme switching (light/dark/system) with smooth transitions */}
@@ -35,8 +35,8 @@ export default function RootLayout({
             enableSystem
             disableTransitionOnChange
           >
-            {/* Main content container with responsive max-width and padding */}
-            <div className="mx-auto max-w-screen-2xl px-4">
+            {/* Main content container - removed constraints for dashboard pages */}
+            <div className="min-h-screen">
               {children}
             </div>
           </ThemeProvider>
