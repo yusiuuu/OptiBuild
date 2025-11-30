@@ -22,74 +22,75 @@ import {
   Save,
   BarChart3,
   Calendar,
-  Activity
+  Activity,
+  Target
 } from 'lucide-react'
-import { Task, Resource, WhatIfScenario } from '@/lib/data-service'
-import { optimizationEngine } from '@/lib/optimization-engine'
-import { scenariosService } from '@/lib/data-service'
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
+import { Task, Resource, WhatIfScenario, Project } from '@/lib/data-service'
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts'
+import { GanttChart } from '@/components/visualization/gantt-chart'
+import { toast } from 'sonner'
 
-interface WhatIfAnalysisProps {
+interface WhatIfAnalysisEnhancedProps {
   projectId: string
   tasks: Task[]
   resources: Resource[]
-  baseScenario?: OptimizationResult
+  project?: Project
+  baseScenario?: any
   onScenarioSave?: (scenario: WhatIfScenario) => void
 }
 
-interface ScenarioResult {
-  scenarioType: string
-  parameters: Record<string, any>
-  impactAnalysis: {
-    makespanImpact: number
-    costImpact: number
-    makespanImpactPercent: number
-    costImpactPercent: number
-    scheduleRisk?: 'low' | 'medium' | 'high'
-    costRisk?: 'low' | 'medium' | 'high'
-    riskLevel: 'low' | 'medium' | 'high'
-    baseMakespan?: number
-    newMakespan?: number
-    baseCost?: number
-    newCost?: number
+interface ScenarioResponse {
+  schedule_impact: {
+    project_delay_days: number
+    new_end_date: string
+    critical_path: string[]
   }
-  newSchedule?: any
-  newCosts?: any
+  cost_impact: {
+    material_cost_change: number
+    resource_cost_change: number
+    total_cost_impact: number
+  }
+  risk_assessment: {
+    risk_score: number
+    severity: 'low' | 'medium' | 'high'
+  }
+  updated_tasks: Task[]
 }
 
-export function WhatIfAnalysis({ 
+export function WhatIfAnalysisEnhanced({ 
   projectId, 
   tasks, 
   resources, 
+  project,
   baseScenario, 
   onScenarioSave 
-}: WhatIfAnalysisProps) {
-  const [selectedScenarioType, setSelectedScenarioType] = useState<'delay' | 'resource_reduction' | 'material_shortage'>('delay')
+}: WhatIfAnalysisEnhancedProps) {
+  const [selectedScenarioType, setSelectedScenarioType] = useState<'project_delay' | 'resource_reduction' | 'material_shortage'>('project_delay')
   const [scenarioParameters, setScenarioParameters] = useState<Record<string, any>>({})
-  const [scenarioResults, setScenarioResults] = useState<ScenarioResult | null>(null)
+  const [scenarioResults, setScenarioResults] = useState<ScenarioResponse | null>(null)
   const [isRunning, setIsRunning] = useState(false)
   const [savedScenarios, setSavedScenarios] = useState<WhatIfScenario[]>([])
   const [scenarioName, setScenarioName] = useState('')
+  const [dailyProjectCost, setDailyProjectCost] = useState(0)
 
-  // Load saved scenarios
+  // Calculate daily project cost from project budget
   useEffect(() => {
-    const loadScenarios = async () => {
-      try {
-        const scenarios = await scenariosService.getScenarios(projectId)
-        setSavedScenarios(scenarios)
-      } catch (error) {
-        console.error('Error loading scenarios:', error)
-      }
+    if (project && project.budget && project.start_date && project.end_date) {
+      const start = new Date(project.start_date)
+      const end = new Date(project.end_date)
+      const days = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)))
+      setDailyProjectCost(project.budget / days)
+    } else if (project && project.budget) {
+      // Estimate 365 days if no end date
+      setDailyProjectCost(project.budget / 365)
     }
-
-    loadScenarios()
-  }, [projectId])
+  }, [project])
 
   // Initialize scenario parameters based on type
   useEffect(() => {
     const initializeParameters = () => {
       switch (selectedScenarioType) {
-        case 'delay':
+        case 'project_delay':
           setScenarioParameters({
             delayDays: 7,
             affectedTasks: 'all',
@@ -116,106 +117,108 @@ export function WhatIfAnalysis({
     initializeParameters()
   }, [selectedScenarioType])
 
-  // Run scenario analysis
+  // Run scenario analysis using API
   const runScenarioAnalysis = async () => {
-    if (!baseScenario) {
-      alert('No base scenario available. Please run optimization first.')
-      return
-    }
-
-    // Check if we have tasks and resources available
     if (!tasks || tasks.length === 0) {
-      alert('No tasks available. Please add tasks to the project first.')
-      return
-    }
-
-    if (!resources || resources.length === 0) {
-      alert('No resources available. Please add resources to the project first.')
+      toast.error('No tasks available. Please add tasks to the project first.')
       return
     }
 
     setIsRunning(true)
     try {
-      // Ensure baseScenario has input_parameters
-      // If missing, reconstruct from props (tasks and resources)
-      let scenarioToUse = baseScenario
-      if (!baseScenario.input_parameters || !baseScenario.input_parameters.tasks) {
-        console.warn('Base scenario missing input_parameters, reconstructing from props')
-        scenarioToUse = {
-          ...baseScenario,
-          input_parameters: {
-            tasks: tasks || [],
-            resources: resources || [],
-            constraints: baseScenario.input_parameters?.constraints || {},
-            config: baseScenario.input_parameters?.config || {}
-          }
-        }
+      // Prepare request payload
+      const requestPayload = {
+        scenario_type: selectedScenarioType,
+        parameters: scenarioParameters,
+        project_id: projectId,
+        tasks: tasks.map(task => ({
+          id: task.id || '',
+          title: task.title || task.name || '',
+          start_date: task.start_date,
+          end_date: task.end_date,
+          duration_days: task.duration_days,
+          dependencies: (task as any).dependencies || [],
+          priority: task.priority || 'medium',
+          estimated_cost: task.estimated_cost || 0,
+          assigned_to: task.assigned_to
+        })),
+        base_end_date: project?.end_date,
+        daily_project_cost: dailyProjectCost
       }
 
-      const result = await optimizationEngine.runWhatIfAnalysis(
-        scenarioToUse,
-        selectedScenarioType,
-        scenarioParameters
-      )
-
-      setScenarioResults({
-        scenarioType: selectedScenarioType,
-        parameters: scenarioParameters,
-        impactAnalysis: result.results.impactAnalysis,
-        newSchedule: result.results.optimalSchedule,
-        newCosts: result.results.totalCost
+      const response = await fetch('/api/scenario/run', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestPayload),
       })
-    } catch (error) {
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || 'Failed to run scenario analysis')
+      }
+
+      const result: ScenarioResponse = await response.json()
+      setScenarioResults(result)
+      toast.success('Scenario analysis completed successfully!')
+    } catch (error: any) {
       console.error('Error running scenario analysis:', error)
-      alert('Error running scenario analysis. Please try again.')
+      toast.error(error.message || 'Error running scenario analysis. Please try again.')
     } finally {
       setIsRunning(false)
     }
   }
 
-  // Save scenario
-  const saveScenario = async () => {
-    if (!scenarioResults || !scenarioName.trim()) {
-      alert('Please provide a scenario name and run analysis first.')
-      return
-    }
+  // Prepare chart data
+  const prepareChartData = () => {
+    if (!scenarioResults) return []
 
-    try {
-      const scenario: Omit<WhatIfScenario, 'id' | 'created_at'> = {
-        project_id: projectId,
-        user_id: '', // Will be set by the service
-        scenario_name: scenarioName,
-        scenario_type: selectedScenarioType,
-        parameters: scenarioParameters,
-        results: scenarioResults,
-        impact_analysis: scenarioResults.impactAnalysis
+    return [
+      {
+        name: 'Schedule Impact',
+        value: scenarioResults.schedule_impact.project_delay_days,
+        type: 'days'
+      },
+      {
+        name: 'Cost Impact',
+        value: scenarioResults.cost_impact.total_cost_impact,
+        type: 'rupees'
+      },
+      {
+        name: 'Risk Score',
+        value: scenarioResults.risk_assessment.risk_score,
+        type: 'score'
       }
-
-      const savedScenario = await scenariosService.createScenario(scenario)
-      setSavedScenarios(prev => [savedScenario, ...prev])
-      setScenarioName('')
-      
-      if (onScenarioSave) {
-        onScenarioSave(savedScenario)
-      }
-      
-      alert('Scenario saved successfully!')
-    } catch (error) {
-      console.error('Error saving scenario:', error)
-      alert('Error saving scenario. Please try again.')
-    }
+    ]
   }
 
-  // Get impact color
-  const getImpactColor = (impact: number) => {
-    if (impact > 0) return 'text-red-600'
-    if (impact < 0) return 'text-green-600'
-    return 'text-gray-600'
+  // Prepare cost breakdown data
+  const prepareCostBreakdown = () => {
+    if (!scenarioResults) return []
+
+    return [
+      {
+        name: 'Material Cost',
+        change: scenarioResults.cost_impact.material_cost_change,
+        color: '#8884d8'
+      },
+      {
+        name: 'Resource Cost',
+        change: scenarioResults.cost_impact.resource_cost_change,
+        color: '#82ca9d'
+      },
+      {
+        name: 'Total Impact',
+        change: scenarioResults.cost_impact.total_cost_impact,
+        color: scenarioResults.cost_impact.total_cost_impact > 0 ? '#ff6b6b' : '#51cf66'
+      }
+    ]
   }
 
-  // Get risk level color
-  const getRiskColor = (riskLevel: string) => {
-    switch (riskLevel) {
+  // Get risk color
+  const getRiskColor = (severity: string) => {
+    switch (severity) {
       case 'high':
         return 'text-red-600 bg-red-50 border-red-200'
       case 'medium':
@@ -233,7 +236,7 @@ export function WhatIfAnalysis({
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <BarChart3 className="h-5 w-5" />
-            What-If Analysis
+            What-If Scenario Analysis
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -247,12 +250,15 @@ export function WhatIfAnalysis({
               {/* Scenario Type Selection */}
               <div className="space-y-4">
                 <Label>Scenario Type</Label>
-                <Select value={selectedScenarioType} onValueChange={(value: any) => setSelectedScenarioType(value)}>
+                <Select 
+                  value={selectedScenarioType} 
+                  onValueChange={(value: any) => setSelectedScenarioType(value)}
+                >
                   <SelectTrigger>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="delay">
+                    <SelectItem value="project_delay">
                       <div className="flex items-center gap-2">
                         <Clock className="h-4 w-4" />
                         Project Delay
@@ -278,7 +284,7 @@ export function WhatIfAnalysis({
               <div className="space-y-4">
                 <Label>Scenario Parameters</Label>
                 
-                {selectedScenarioType === 'delay' && (
+                {selectedScenarioType === 'project_delay' && (
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                       <Label htmlFor="delayDays">Delay Days</Label>
@@ -365,6 +371,7 @@ export function WhatIfAnalysis({
                         <SelectContent>
                           <SelectItem value="labor">Labor</SelectItem>
                           <SelectItem value="equipment">Equipment</SelectItem>
+                          <SelectItem value="material">Material</SelectItem>
                           <SelectItem value="all">All Resources</SelectItem>
                         </SelectContent>
                       </Select>
@@ -454,156 +461,176 @@ export function WhatIfAnalysis({
 
               {/* Scenario Results */}
               {scenarioResults && (
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <AlertTriangle className="h-5 w-5" />
-                      Analysis Results
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Impact Summary */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="p-4 bg-blue-50 rounded-lg">
+                <div className="space-y-6">
+                  {/* Impact Summary Cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <Card>
+                      <CardContent className="p-6">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm text-blue-600 font-medium">Schedule Impact</p>
-                            <p className={`text-2xl font-bold ${getImpactColor(scenarioResults.impactAnalysis.makespanImpact)}`}>
-                              {scenarioResults.impactAnalysis.makespanImpact >= 0 ? '+' : ''}{scenarioResults.impactAnalysis.makespanImpact} days
+                            <p className="text-sm text-gray-600 font-medium">Schedule Impact</p>
+                            <p className={`text-2xl font-bold ${
+                              scenarioResults.schedule_impact.project_delay_days >= 0 ? 'text-red-600' : 'text-green-600'
+                            }`}>
+                              {scenarioResults.schedule_impact.project_delay_days >= 0 ? '+' : ''}
+                              {scenarioResults.schedule_impact.project_delay_days.toFixed(1)} days
                             </p>
-                            <p className="text-sm text-gray-600">
-                              {scenarioResults.impactAnalysis.makespanImpactPercent.toFixed(1)}% change
+                            <p className="text-xs text-gray-500 mt-1">
+                              New End: {new Date(scenarioResults.schedule_impact.new_end_date).toLocaleDateString()}
                             </p>
                           </div>
                           <Clock className="h-8 w-8 text-blue-600" />
                         </div>
-                      </div>
+                      </CardContent>
+                    </Card>
 
-                      <div className="p-4 bg-green-50 rounded-lg">
+                    <Card>
+                      <CardContent className="p-6">
                         <div className="flex items-center justify-between">
                           <div>
-                            <p className="text-sm text-green-600 font-medium">Cost Impact</p>
-                            <p className={`text-2xl font-bold ${getImpactColor(scenarioResults.impactAnalysis.costImpact)}`}>
-                              {scenarioResults.impactAnalysis.costImpact >= 0 ? '+' : ''}₹{Math.abs(scenarioResults.impactAnalysis.costImpact).toLocaleString()}
+                            <p className="text-sm text-gray-600 font-medium">Cost Impact</p>
+                            <p className={`text-2xl font-bold ${
+                              scenarioResults.cost_impact.total_cost_impact >= 0 ? 'text-red-600' : 'text-green-600'
+                            }`}>
+                              {scenarioResults.cost_impact.total_cost_impact >= 0 ? '+' : ''}
+                              ₹{Math.abs(scenarioResults.cost_impact.total_cost_impact).toLocaleString('en-IN')}
                             </p>
-                            <p className="text-sm text-gray-600">
-                              {scenarioResults.impactAnalysis.costImpactPercent.toFixed(1)}% change
+                            <p className="text-xs text-gray-500 mt-1">
+                              Total project cost change
                             </p>
                           </div>
                           <DollarSign className="h-8 w-8 text-green-600" />
                         </div>
-                      </div>
-                    </div>
+                      </CardContent>
+                    </Card>
 
-                    {/* Risk Assessment */}
-                    <div className="p-4 border rounded-lg">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-semibold">Risk Assessment</h4>
-                        <Badge className={getRiskColor(scenarioResults.impactAnalysis.riskLevel)}>
-                          {scenarioResults.impactAnalysis.riskLevel.toUpperCase()} RISK
-                        </Badge>
-                      </div>
-                      
-                      <div className="space-y-3">
-                        <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                          <div className="flex items-center gap-2">
-                            <Clock className="h-4 w-4 text-gray-600" />
-                            <span className="text-sm font-medium text-gray-700">Schedule Risk</span>
+                    <Card>
+                      <CardContent className="p-6">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm text-gray-600 font-medium">Risk Assessment</p>
+                            <p className="text-2xl font-bold text-gray-900">
+                              {scenarioResults.risk_assessment.risk_score}/100
+                            </p>
+                            <Badge className={getRiskColor(scenarioResults.risk_assessment.severity)}>
+                              {scenarioResults.risk_assessment.severity.toUpperCase()}
+                            </Badge>
                           </div>
-                          <Badge className={getRiskColor(scenarioResults.impactAnalysis.scheduleRisk || 'low')}>
-                            {(scenarioResults.impactAnalysis.scheduleRisk || 'low').toUpperCase()}
-                          </Badge>
+                          <AlertTriangle className="h-8 w-8 text-yellow-600" />
                         </div>
-                        
-                        <div className="flex justify-between items-center p-2 bg-gray-50 rounded">
-                          <div className="flex items-center gap-2">
-                            <DollarSign className="h-4 w-4 text-gray-600" />
-                            <span className="text-sm font-medium text-gray-700">Cost Risk</span>
-                          </div>
-                          <Badge className={getRiskColor(scenarioResults.impactAnalysis.costRisk || 'low')}>
-                            {(scenarioResults.impactAnalysis.costRisk || 'low').toUpperCase()}
-                          </Badge>
-                        </div>
-                      </div>
-                    </div>
+                      </CardContent>
+                    </Card>
+                  </div>
 
-                    {/* Save Scenario */}
-                    <div className="flex items-center gap-4">
-                      <Input
-                        placeholder="Enter scenario name"
-                        value={scenarioName}
-                        onChange={(e) => setScenarioName(e.target.value)}
-                        className="flex-1"
-                      />
-                      <Button onClick={saveScenario} className="flex items-center gap-2">
-                        <Save className="h-4 w-4" />
-                        Save Scenario
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
+                  {/* Charts */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Cost Breakdown Chart */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">Cost Impact Breakdown</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <BarChart data={prepareCostBreakdown()}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" />
+                            <YAxis />
+                            <Tooltip 
+                              formatter={(value: number) => `₹${value.toLocaleString('en-IN')}`}
+                            />
+                            <Legend />
+                            <Bar dataKey="change" fill="#8884d8">
+                              {prepareCostBreakdown().map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Bar>
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+
+                    {/* Risk Score Meter */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">Risk Score</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="text-center">
+                            <div className="text-4xl font-bold mb-2">
+                              {scenarioResults.risk_assessment.risk_score}
+                            </div>
+                            <Progress 
+                              value={scenarioResults.risk_assessment.risk_score} 
+                              className="h-4"
+                            />
+                          </div>
+                          <div className="grid grid-cols-3 gap-2 text-center text-sm">
+                            <div>
+                              <div className="text-green-600 font-medium">0-39</div>
+                              <div className="text-gray-500">Low</div>
+                            </div>
+                            <div>
+                              <div className="text-yellow-600 font-medium">40-69</div>
+                              <div className="text-gray-500">Medium</div>
+                            </div>
+                            <div>
+                              <div className="text-red-600 font-medium">70-100</div>
+                              <div className="text-gray-500">High</div>
+                            </div>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Gantt Chart */}
+                  {scenarioResults.updated_tasks && scenarioResults.updated_tasks.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg">Updated Schedule (Gantt Chart)</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <GanttChart 
+                          tasks={scenarioResults.updated_tasks as Task[]}
+                          readonly={true}
+                        />
+                      </CardContent>
+                    </Card>
+                  )}
+
+                  {/* Critical Path */}
+                  {scenarioResults.schedule_impact.critical_path.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Target className="h-5 w-5" />
+                          Critical Path
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="flex flex-wrap gap-2">
+                          {scenarioResults.schedule_impact.critical_path.map((taskId) => {
+                            const task = tasks.find(t => t.id === taskId)
+                            return (
+                              <Badge key={taskId} variant="outline" className="px-3 py-1">
+                                {task?.title || task?.name || taskId}
+                              </Badge>
+                            )
+                          })}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
               )}
             </TabsContent>
 
             <TabsContent value="saved" className="space-y-4">
-              {savedScenarios.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <BarChart3 className="h-12 w-12 mx-auto mb-4 text-gray-300" />
-                  <p>No saved scenarios yet.</p>
-                  <p className="text-sm">Create and save scenarios to compare different project outcomes.</p>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {savedScenarios.map((scenario) => (
-                    <Card key={scenario.id}>
-                      <CardContent className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <div>
-                            <h4 className="font-semibold">{scenario.scenario_name}</h4>
-                            <p className="text-sm text-gray-600 capitalize">
-                              {scenario.scenario_type.replace('_', ' ')} Scenario
-                            </p>
-                          </div>
-                          <Badge className={getRiskColor(scenario.impact_analysis?.riskLevel || 'low')}>
-                            {scenario.impact_analysis?.riskLevel?.toUpperCase() || 'LOW'} RISK
-                          </Badge>
-                        </div>
-
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                          <div className="text-center">
-                            <p className="text-lg font-bold text-gray-900">
-                              {scenario.impact_analysis?.makespanImpact >= 0 ? '+' : ''}{scenario.impact_analysis?.makespanImpact || 0}
-                            </p>
-                            <p className="text-sm text-gray-500">Days Impact</p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-lg font-bold text-gray-900">
-                              {scenario.impact_analysis?.costImpact >= 0 ? '+' : ''}₹{Math.abs(scenario.impact_analysis?.costImpact || 0).toLocaleString()}
-                            </p>
-                            <p className="text-sm text-gray-500">Cost Impact</p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-lg font-bold text-gray-900">
-                              {scenario.impact_analysis?.makespanImpactPercent?.toFixed(1) || 0}%
-                            </p>
-                            <p className="text-sm text-gray-500">Schedule %</p>
-                          </div>
-                          <div className="text-center">
-                            <p className="text-lg font-bold text-gray-900">
-                              {scenario.impact_analysis?.costImpactPercent?.toFixed(1) || 0}%
-                            </p>
-                            <p className="text-sm text-gray-500">Cost %</p>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 text-xs text-gray-500">
-                          Created: {new Date(scenario.created_at || '').toLocaleDateString()}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
+              <div className="text-center py-8 text-gray-500">
+                <BarChart3 className="h-12 w-12 mx-auto mb-4 text-gray-300" />
+                <p>Saved scenarios feature coming soon.</p>
+              </div>
             </TabsContent>
           </Tabs>
         </CardContent>
@@ -611,3 +638,4 @@ export function WhatIfAnalysis({
     </div>
   )
 }
+

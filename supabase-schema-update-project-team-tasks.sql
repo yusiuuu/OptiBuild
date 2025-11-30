@@ -137,3 +137,8 @@ USING (
 -- Add comment to document the relationship
 COMMENT ON COLUMN public.tasks.assigned_to_project_team IS 'References project_team_members.id - ensures task is assigned to a team member who is part of the project';
 
+
+
+
+
+

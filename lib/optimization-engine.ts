@@ -257,8 +257,8 @@ export class OptimizationEngine {
     // Re-run optimization with modified parameters
     const newResult = await this.optimizeTaskScheduling(modifiedTasks, modifiedResources)
     
-    // Calculate impact analysis
-    const impactAnalysis = this.calculateImpactAnalysis(baseScenario, newResult)
+    // Calculate impact analysis with scenario context
+    const impactAnalysis = this.calculateImpactAnalysis(baseScenario, newResult, scenarioType, parameters)
     
     return {
       ...newResult,
@@ -573,20 +573,224 @@ export class OptimizationEngine {
   // What-If Analysis Helper Methods
   private applyDelayScenario(tasks: Task[], parameters: Record<string, any>): Task[] {
     const delayDays = parameters.delayDays || 7
-    return tasks.map(task => ({
-      ...task,
-      start_date: task.start_date ? 
-        new Date(new Date(task.start_date).getTime() + delayDays * 24 * 60 * 60 * 1000).toISOString().split('T')[0] :
-        undefined
-    }))
+    const affectedTasks = parameters.affectedTasks || 'all'
+    const delayReason = parameters.delayReason || 'weather'
+    
+    // Calculate delay multiplier based on reason
+    // Some reasons cause cascading delays (e.g., permit issues affect all subsequent tasks)
+    const delayMultiplier = this.getDelayMultiplier(delayReason)
+    
+    return tasks.map((task, index) => {
+      let shouldDelay = false
+      
+      // Determine which tasks are affected
+      if (affectedTasks === 'all') {
+        shouldDelay = true
+      } else if (affectedTasks === 'critical') {
+        // Assume tasks with high priority or dependencies are critical
+        shouldDelay = task.priority === 'high' || (task as any).dependencies?.length > 0
+      } else if (affectedTasks === 'specific') {
+        // Delay specific tasks (could be enhanced with task selection)
+        shouldDelay = index < Math.ceil(tasks.length * 0.3) // Delay first 30% of tasks
+      }
+      
+      if (shouldDelay) {
+        const actualDelay = Math.ceil(delayDays * delayMultiplier)
+        const newStartDate = task.start_date ? 
+          new Date(new Date(task.start_date).getTime() + actualDelay * 24 * 60 * 60 * 1000).toISOString().split('T')[0] :
+          undefined
+        
+        // Also extend end date if it exists
+        const newEndDate = task.end_date ? 
+          new Date(new Date(task.end_date).getTime() + actualDelay * 24 * 60 * 60 * 1000).toISOString().split('T')[0] :
+          undefined
+        
+        return {
+          ...task,
+          start_date: newStartDate,
+          end_date: newEndDate,
+          duration_days: task.duration_days ? task.duration_days + actualDelay : undefined
+        }
+      }
+      
+      return task
+    })
+  }
+  
+  private getDelayMultiplier(delayReason: string): number {
+    // Different delay reasons have different impact multipliers
+    switch (delayReason) {
+      case 'weather':
+        return 1.0 // Direct delay, no cascading
+      case 'permit':
+        return 1.5 // Permits affect all subsequent tasks
+      case 'supply':
+        return 1.3 // Supply chain delays cascade moderately
+      case 'labor':
+        return 1.2 // Labor shortages cascade slightly
+      default:
+        return 1.0
+    }
   }
 
   private applyResourceReductionScenario(resources: Resource[], parameters: Record<string, any>): Resource[] {
     const reductionPercent = parameters.reductionPercent || 20
-    return resources.map(resource => ({
-      ...resource,
-      quantity: Math.max(1, Math.floor(resource.quantity * (1 - reductionPercent / 100)))
-    }))
+    const resourceType = parameters.resourceType || 'all'
+    const duration = parameters.duration || 30 // Duration in days
+    
+    return resources.map(resource => {
+      // Check if this resource type should be reduced
+      let shouldReduce = false
+      
+      if (resourceType === 'all') {
+        shouldReduce = true
+      } else if (resourceType === 'labor' && resource.type === 'labour') {
+        shouldReduce = true
+      } else if (resourceType === 'equipment' && resource.type === 'equipment') {
+        shouldReduce = true
+      } else if (resourceType === 'material' && resource.type === 'material') {
+        shouldReduce = true
+      }
+      
+      if (shouldReduce) {
+        // Store reduction metadata for impact calculation
+        // Resources don't have quantity in base interface, so we'll track reduction percentage
+        return {
+          ...resource,
+          // Store reduction parameters for impact calculation
+          reductionPercent,
+          reductionDuration: duration,
+          isReduced: true,
+          // For cost calculation, we'll use base_cost with reduction applied
+          effectiveCost: resource.base_cost * (1 + (reductionPercent / 100) * 0.1) // Slight cost increase due to efficiency loss
+        }
+      }
+      
+      return resource
+    })
+  }
+  
+  private calculateResourceReductionImpact(
+    baseResources: Resource[],
+    newResources: Resource[],
+    reductionPercent: number,
+    resourceType: string,
+    duration: number,
+    baseMakespan: number
+  ): { scheduleImpact: number; costImpact: number } {
+    // Calculate how resource reduction affects schedule
+    // Fewer resources = tasks take longer to complete
+    
+    // Resource efficiency impact multiplier
+    // Higher reduction = more schedule impact
+    const efficiencyLoss = reductionPercent / 100 // 0.2 for 20% reduction
+    
+    // Different resource types have different impact on schedule
+    const scheduleImpactMultiplier = this.getResourceScheduleImpactMultiplier(resourceType)
+    
+    // Calculate schedule impact based on reduction percentage and duration
+    // Formula: base makespan * efficiency loss * resource type multiplier * (duration / base makespan ratio)
+    // If duration is less than makespan, impact is proportional
+    const durationRatio = Math.min(1, duration / Math.max(baseMakespan, 1))
+    
+    // Base schedule impact from resource reduction
+    let scheduleImpact = baseMakespan * efficiencyLoss * scheduleImpactMultiplier
+    
+    // Adjust based on duration - if reduction is temporary, impact is proportional
+    if (durationRatio < 1) {
+      scheduleImpact = scheduleImpact * durationRatio
+    }
+    
+    // Minimum impact even for short durations (setup/coordination overhead)
+    const minimumImpact = Math.ceil(baseMakespan * 0.05 * efficiencyLoss) // At least 5% of reduction impact
+    scheduleImpact = Math.max(minimumImpact, scheduleImpact)
+    
+    // Calculate cost impact
+    // Cost savings from reduced resource usage vs. additional costs from delays
+    
+    // Estimate resource usage cost (assuming average daily usage)
+    // For resources, we estimate based on base_cost and typical project usage
+    let estimatedDailyResourceCost = 0
+    let reducedResourceCost = 0
+    
+    baseResources.forEach((baseRes, index) => {
+      const newRes = newResources[index]
+      const isReduced = (newRes as any)?.isReduced || false
+      
+      if (isReduced) {
+        // Estimate typical daily usage (assume 1 unit per day per resource type)
+        // In real scenario, this would come from project resource assignments
+        const typicalDailyUsage = this.getTypicalDailyUsage(baseRes.type)
+        const unitCost = baseRes.base_cost || 0
+        
+        // Base daily cost
+        const baseDailyCost = typicalDailyUsage * unitCost
+        
+        // Reduced daily cost (after reduction)
+        const reducedDailyCost = baseDailyCost * (1 - efficiencyLoss)
+        
+        estimatedDailyResourceCost += baseDailyCost
+        reducedResourceCost += reducedDailyCost
+      } else {
+        // Non-reduced resources still cost the same
+        const typicalDailyUsage = this.getTypicalDailyUsage(baseRes.type)
+        const unitCost = baseRes.base_cost || 0
+        estimatedDailyResourceCost += typicalDailyUsage * unitCost
+        reducedResourceCost += typicalDailyUsage * unitCost
+      }
+    })
+    
+    // Calculate savings over duration
+    const resourceCostSavings = (estimatedDailyResourceCost - reducedResourceCost) * duration
+    
+    // Calculate additional costs due to schedule delays
+    // Daily overhead cost increases with delays
+    const dailyOverheadRate = 0.001 // 0.1% of base cost per day
+    const estimatedBaseCost = estimatedDailyResourceCost * baseMakespan
+    const delayCost = scheduleImpact * estimatedBaseCost * dailyOverheadRate
+    
+    // Additional efficiency loss cost (reduced resources may need overtime/premium rates)
+    const efficiencyLossCost = estimatedDailyResourceCost * duration * efficiencyLoss * 0.2 // 20% premium
+    
+    // Net cost impact = savings - delay costs - efficiency loss costs
+    const costImpact = resourceCostSavings - delayCost - efficiencyLossCost
+    
+    return {
+      scheduleImpact: Math.ceil(scheduleImpact),
+      costImpact
+    }
+  }
+  
+  private getTypicalDailyUsage(resourceType: string): number {
+    // Estimate typical daily usage per resource type
+    // This is a heuristic - in production, this would come from actual project data
+    switch (resourceType) {
+      case 'labour':
+        return 8 // 8 hours per day per labor resource
+      case 'equipment':
+        return 1 // 1 unit per day per equipment
+      case 'material':
+        return 10 // 10 units per day per material (varies widely)
+      default:
+        return 1
+    }
+  }
+  
+  private getResourceScheduleImpactMultiplier(resourceType: string): number {
+    // Different resource types have different impacts on schedule
+    switch (resourceType) {
+      case 'labor':
+      case 'labour':
+        return 1.5 // Labor reduction has highest schedule impact
+      case 'equipment':
+        return 1.2 // Equipment reduction has moderate impact
+      case 'material':
+        return 0.8 // Material reduction has lower schedule impact (can stockpile)
+      case 'all':
+        return 1.3 // Combined reduction has significant impact
+      default:
+        return 1.0
+    }
   }
 
   private applyMaterialShortageScenario(resources: Resource[], parameters: Record<string, any>): Resource[] {
@@ -603,25 +807,238 @@ export class OptimizationEngine {
     })
   }
 
-  private calculateImpactAnalysis(baseScenario: OptimizationResult, newScenario: OptimizationResult): Record<string, any> {
-    const baseMakespan = baseScenario.results.makespan as number
-    const newMakespan = newScenario.results.makespan as number
-    const baseCost = baseScenario.results.totalCost as number
-    const newCost = newScenario.results.totalCost as number
+  private calculateImpactAnalysis(
+    baseScenario: OptimizationResult, 
+    newScenario: OptimizationResult,
+    scenarioType?: string,
+    parameters?: Record<string, any>
+  ): Record<string, any> {
+    // Safely extract makespan and totalCost from base scenario
+    let baseMakespan: number = 0
+    let baseCost: number = 0
+    
+    if (baseScenario.results) {
+      baseMakespan = (baseScenario.results.makespan as number) || 0
+      baseCost = (baseScenario.results.totalCost as number) || 0
+      
+      // Calculate from optimalSchedule if available
+      if (baseMakespan === 0 && baseScenario.results.optimalSchedule) {
+        const tasks = baseScenario.input_parameters?.tasks || []
+        baseMakespan = this.calculateMakespan(baseScenario.results.optimalSchedule as ScheduleChromosome, tasks)
+      }
+      
+      // Calculate from tasks if still not found
+      if (baseMakespan === 0 && baseScenario.input_parameters?.tasks) {
+        baseMakespan = this.calculateMakespanFromTasks(baseScenario.input_parameters.tasks as Task[])
+      }
+      
+      // Calculate cost from tasks
+      if (baseCost === 0 && baseScenario.input_parameters?.tasks) {
+        const tasks = baseScenario.input_parameters.tasks as Task[]
+        baseCost = tasks.reduce((total, task) => total + (task.estimated_cost || 0), 0)
+      }
+      
+      // Also include resource costs if available
+      if (baseScenario.input_parameters?.resources) {
+        const resources = baseScenario.input_parameters.resources as Resource[]
+        const resourceCost = resources.reduce((total, res) => {
+          const quantity = (res as any).quantity || 1
+          const cost = res.base_cost || 0
+          return total + (quantity * cost)
+        }, 0)
+        baseCost += resourceCost
+      }
+    }
+    
+    // Safely extract makespan and totalCost from new scenario
+    let newMakespan = (newScenario.results?.makespan as number) || 0
+    let newCost = (newScenario.results?.totalCost as number) || 0
+    
+    // Calculate from optimalSchedule if available
+    if (newMakespan === 0 && newScenario.results?.optimalSchedule) {
+      const tasks = newScenario.input_parameters?.tasks || []
+      newMakespan = this.calculateMakespan(newScenario.results.optimalSchedule as ScheduleChromosome, tasks)
+    }
+    
+    // Calculate from tasks if still not found
+    if (newMakespan === 0 && newScenario.input_parameters?.tasks) {
+      newMakespan = this.calculateMakespanFromTasks(newScenario.input_parameters.tasks as Task[])
+    }
+    
+    // Calculate cost from tasks
+    if (newCost === 0 && newScenario.input_parameters?.tasks) {
+      const tasks = newScenario.input_parameters.tasks as Task[]
+      newCost = tasks.reduce((total, task) => total + (task.estimated_cost || 0), 0)
+    }
+    
+    // Include resource costs
+    if (newScenario.input_parameters?.resources) {
+      const resources = newScenario.input_parameters.resources as Resource[]
+      const resourceCost = resources.reduce((total, res) => {
+        const quantity = (res as any).quantity || 1
+        const cost = res.base_cost || 0
+        return total + (quantity * cost)
+      }, 0)
+      newCost += resourceCost
+    }
+    
+    // For delay scenarios, calculate more accurate impact based on parameters
+    if (scenarioType === 'delay' && parameters) {
+      const delayDays = parameters.delayDays || 0
+      const affectedTasks = parameters.affectedTasks || 'all'
+      const delayReason = parameters.delayReason || 'weather'
+      
+      // Calculate actual schedule impact based on delay parameters
+      const delayMultiplier = this.getDelayMultiplier(delayReason)
+      let actualScheduleImpact = delayDays
+      
+      if (affectedTasks === 'critical') {
+        // Critical path delays affect entire project timeline
+        actualScheduleImpact = Math.ceil(delayDays * delayMultiplier * 1.2)
+      } else if (affectedTasks === 'all') {
+        // All tasks delayed - direct impact
+        actualScheduleImpact = Math.ceil(delayDays * delayMultiplier)
+      } else {
+        // Specific tasks - partial impact
+        actualScheduleImpact = Math.ceil(delayDays * delayMultiplier * 0.7)
+      }
+      
+      // Override makespan impact with calculated value if it's more accurate
+      if (actualScheduleImpact > Math.abs(newMakespan - baseMakespan)) {
+        newMakespan = baseMakespan + actualScheduleImpact
+      }
+      
+      // Calculate cost impact based on delay reason
+      const dailyOverheadCost = baseCost * 0.001 // 0.1% of base cost per day
+      const delayCostMultiplier = this.getDelayCostMultiplier(delayReason)
+      const additionalCost = actualScheduleImpact * dailyOverheadCost * delayCostMultiplier
+      newCost = baseCost + additionalCost
+    }
+    
+    // For resource reduction scenarios, calculate more accurate impact based on parameters
+    if (scenarioType === 'resource_reduction' && parameters) {
+      const reductionPercent = parameters.reductionPercent || 0
+      const resourceType = parameters.resourceType || 'all'
+      const duration = parameters.duration || 30
+      
+      // Get base and new resources
+      const baseResources = (baseScenario.input_parameters?.resources || []) as Resource[]
+      const newResources = (newScenario.input_parameters?.resources || []) as Resource[]
+      
+      if (baseResources.length > 0 && newResources.length > 0) {
+        // Calculate resource reduction impact
+        const reductionImpact = this.calculateResourceReductionImpact(
+          baseResources,
+          newResources,
+          reductionPercent,
+          resourceType,
+          duration,
+          baseMakespan
+        )
+        
+        // Update schedule impact
+        const calculatedScheduleImpact = reductionImpact.scheduleImpact
+        if (calculatedScheduleImpact > 0) {
+          newMakespan = baseMakespan + calculatedScheduleImpact
+        }
+        
+        // Update cost impact (can be negative if savings exceed delay costs)
+        const calculatedCostImpact = reductionImpact.costImpact
+        newCost = baseCost + calculatedCostImpact
+      }
+    }
+    
+    // Calculate impacts
+    const makespanImpact = newMakespan - baseMakespan
+    const costImpact = newCost - baseCost
+    const makespanImpactPercent = baseMakespan > 0 ? ((makespanImpact / baseMakespan) * 100) : 0
+    const costImpactPercent = baseCost > 0 ? ((costImpact / baseCost) * 100) : 0
+    
+    // Calculate separate risk assessments
+    const scheduleRisk = this.assessScheduleRisk(makespanImpact, makespanImpactPercent)
+    const costRisk = this.assessCostRisk(costImpact, costImpactPercent)
+    const overallRisk = this.assessOverallRisk(scheduleRisk, costRisk)
     
     return {
-      makespanImpact: newMakespan - baseMakespan,
-      costImpact: newCost - baseCost,
-      makespanImpactPercent: ((newMakespan - baseMakespan) / baseMakespan) * 100,
-      costImpactPercent: ((newCost - baseCost) / baseCost) * 100,
-      riskLevel: this.assessRiskLevel(newMakespan - baseMakespan, newCost - baseCost)
+      makespanImpact,
+      costImpact,
+      makespanImpactPercent,
+      costImpactPercent,
+      baseMakespan,
+      newMakespan,
+      baseCost,
+      newCost,
+      scheduleRisk,
+      costRisk,
+      riskLevel: overallRisk
     }
   }
-
-  private assessRiskLevel(makespanImpact: number, costImpact: number): 'low' | 'medium' | 'high' {
-    if (makespanImpact > 30 || costImpact > 500000) return 'high'
-    if (makespanImpact > 15 || costImpact > 200000) return 'medium'
+  
+  private calculateMakespanFromTasks(tasks: Task[]): number {
+    if (!tasks || tasks.length === 0) return 0
+    
+    const dates = tasks.map(t => {
+      const endDate = t.end_date ? new Date(t.end_date).getTime() : 0
+      const startDate = t.start_date ? new Date(t.start_date).getTime() : 0
+      const duration = t.duration_days || 0
+      return endDate || (startDate + duration * 24 * 60 * 60 * 1000) || 0
+    }).filter(d => d > 0)
+    
+    if (dates.length === 0) return 0
+    
+    const maxEndDate = Math.max(...dates)
+    const now = Date.now()
+    return maxEndDate > now ? Math.ceil((maxEndDate - now) / (1000 * 60 * 60 * 24)) : 0
+  }
+  
+  private getDelayCostMultiplier(delayReason: string): number {
+    // Different delay reasons have different cost impacts
+    switch (delayReason) {
+      case 'weather':
+        return 1.0 // Minimal additional cost (just overhead)
+      case 'permit':
+        return 1.5 // Permit delays often involve penalties and rework
+      case 'supply':
+        return 2.0 // Supply chain delays cause rush orders and premium pricing
+      case 'labor':
+        return 1.8 // Labor shortages require overtime and premium rates
+      default:
+        return 1.0
+    }
+  }
+  
+  private assessScheduleRisk(makespanImpact: number, makespanImpactPercent: number): 'low' | 'medium' | 'high' {
+    // Assess risk based on both absolute days and percentage
+    const absDays = Math.abs(makespanImpact)
+    const absPercent = Math.abs(makespanImpactPercent)
+    
+    if (absDays > 30 || absPercent > 25) return 'high'
+    if (absDays > 15 || absPercent > 12) return 'medium'
     return 'low'
+  }
+  
+  private assessCostRisk(costImpact: number, costImpactPercent: number): 'low' | 'medium' | 'high' {
+    // Assess risk based on both absolute cost and percentage
+    const absCost = Math.abs(costImpact)
+    const absPercent = Math.abs(costImpactPercent)
+    
+    if (absCost > 500000 || absPercent > 20) return 'high'
+    if (absCost > 200000 || absPercent > 10) return 'medium'
+    return 'low'
+  }
+  
+  private assessOverallRisk(scheduleRisk: 'low' | 'medium' | 'high', costRisk: 'low' | 'medium' | 'high'): 'low' | 'medium' | 'high' {
+    // Overall risk is the higher of the two, or medium if one is high and other is low
+    if (scheduleRisk === 'high' || costRisk === 'high') return 'high'
+    if (scheduleRisk === 'medium' || costRisk === 'medium') return 'medium'
+    return 'low'
+  }
+
+  // Legacy method - kept for backward compatibility
+  private assessRiskLevel(makespanImpact: number, costImpact: number): 'low' | 'medium' | 'high' {
+    const scheduleRisk = this.assessScheduleRisk(makespanImpact, 0)
+    const costRisk = this.assessCostRisk(costImpact, 0)
+    return this.assessOverallRisk(scheduleRisk, costRisk)
   }
 
   // Utility methods for random generation

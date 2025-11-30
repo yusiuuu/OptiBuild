@@ -76,3 +76,8 @@ COMMENT ON TABLE public.resources IS 'Global resource catalog - user-owned resou
 COMMENT ON COLUMN public.resources.project_id IS 'DEPRECATED: Use project_resources table instead. This column is kept for backward compatibility but should be NULL for new resources.';
 COMMENT ON COLUMN public.resources.user_id IS 'Owner of the resource - resources are global to the user, not project-specific';
 
+
+
+
+
+

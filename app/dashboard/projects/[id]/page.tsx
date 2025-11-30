@@ -490,17 +490,19 @@ export default function ProjectDetailsPage() {
 
         {/* Main Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-8">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="tasks">Tasks</TabsTrigger>
-            <TabsTrigger value="team">Team</TabsTrigger>
-            <TabsTrigger value="resources">Resources</TabsTrigger>
-            <TabsTrigger value="documents">Documents</TabsTrigger>
-            <TabsTrigger value="constraints">Constraints</TabsTrigger>
-            <TabsTrigger value="budget">Budget</TabsTrigger>
-            {canViewAnalytics() && <TabsTrigger value="analysis">Analysis</TabsTrigger>}
-            {canGenerateReports() && <TabsTrigger value="reports">Reports</TabsTrigger>}
-          </TabsList>
+          <div className="w-full overflow-x-auto">
+            <TabsList className="inline-flex w-full min-w-max h-10 gap-2 p-1.5">
+              <TabsTrigger value="overview" className="whitespace-nowrap px-5 py-2">Overview</TabsTrigger>
+              <TabsTrigger value="tasks" className="whitespace-nowrap px-5 py-2">Tasks</TabsTrigger>
+              <TabsTrigger value="team" className="whitespace-nowrap px-5 py-2">Team</TabsTrigger>
+              <TabsTrigger value="resources" className="whitespace-nowrap px-5 py-2">Resources</TabsTrigger>
+              <TabsTrigger value="documents" className="whitespace-nowrap px-5 py-2">Documents</TabsTrigger>
+              <TabsTrigger value="constraints" className="whitespace-nowrap px-5 py-2">Constraints</TabsTrigger>
+              <TabsTrigger value="budget" className="whitespace-nowrap px-5 py-2">Budget</TabsTrigger>
+              {canViewAnalytics() && <TabsTrigger value="analysis" className="whitespace-nowrap px-5 py-2">Analysis</TabsTrigger>}
+              {canGenerateReports() && <TabsTrigger value="reports" className="whitespace-nowrap px-5 py-2">Reports</TabsTrigger>}
+            </TabsList>
+          </div>
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">

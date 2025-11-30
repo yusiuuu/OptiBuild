@@ -125,3 +125,8 @@ BEGIN
     RAISE NOTICE 'Resources are now global (user-owned) and can be assigned to projects via project_resources table.';
 END $$;
 
+
+
+
+
+

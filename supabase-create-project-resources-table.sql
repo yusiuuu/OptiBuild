@@ -130,3 +130,8 @@ COMMENT ON COLUMN public.project_resources.total_cost IS 'Calculated total cost 
 -- Grant permissions
 GRANT ALL ON public.project_resources TO anon, authenticated;
 
+
+
+
+
+
