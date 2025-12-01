@@ -81,3 +81,8 @@ COMMENT ON COLUMN public.resources.user_id IS 'Owner of the resource - resources
 
 
 
+
+
+
+
+
