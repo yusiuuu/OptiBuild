@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -33,9 +33,54 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
   const [isEditing, setIsEditing] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [formData, setFormData] = useState({
+  
+  // Helper function to safely get a value (convert null/undefined to empty string or 0)
+  const safeString = (value: any): string => {
+    if (value === null || value === undefined) return ''
+    return String(value)
+  }
+  
+  const safeNumber = (value: any): number => {
+    if (value === null || value === undefined || isNaN(value)) return 0
+    const num = Number(value)
+    return isNaN(num) ? 0 : num
+  }
+  
+  // Initialize formData with safe defaults
+  const [formData, setFormData] = useState(() => ({
+    category: safeString(resource?.category),
+    quantity: safeNumber(resource?.quantity),
+    location: safeString(resource?.location),
+    supplier: safeString(resource?.supplier),
+    cost: safeNumber(resource?.cost || resource?.base_cost),
+    status: safeString(resource?.status),
+    condition: safeString(resource?.condition),
+    dailyRate: safeNumber(resource?.dailyRate || resource?.daily_rate),
+    operator: safeString(resource?.operator),
+    supervisor: safeString(resource?.supervisor),
+    dailyWage: safeNumber(resource?.dailyWage || resource?.daily_wage),
     ...resource,
-  })
+  }))
+
+  // Update formData when resource changes
+  useEffect(() => {
+    if (resource) {
+      setFormData({
+        category: safeString(resource.category),
+        quantity: safeNumber(resource.quantity),
+        location: safeString(resource.location),
+        supplier: safeString(resource.supplier),
+        cost: safeNumber(resource.cost || resource.base_cost),
+        status: safeString(resource.status),
+        condition: safeString(resource.condition),
+        dailyRate: safeNumber(resource.dailyRate || resource.daily_rate),
+        operator: safeString(resource.operator),
+        supervisor: safeString(resource.supervisor),
+        dailyWage: safeNumber(resource.dailyWage || resource.daily_wage),
+        ...resource,
+      })
+    }
+  }, [resource])
 
   const handleChange = (field: string, value: string | number) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
@@ -115,10 +160,10 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
-        <DialogHeader>
+          <DialogHeader>
           <DialogTitle className="flex items-center">
             {getResourceIcon()}
-            <span className="ml-2">{resource.name}</span>
+            <span className="ml-2">{safeString(resource?.name)}</span>
           </DialogTitle>
         </DialogHeader>
 
@@ -128,12 +173,12 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
             <div className="font-medium text-right text-gray-500">Category:</div>
             {isEditing ? (
               <Input
-                value={formData.category}
+                value={safeString(formData.category)}
                 onChange={(e) => handleChange("category", e.target.value)}
                 className="col-span-1"
               />
             ) : (
-              <div>{resource.category}</div>
+              <div>{safeString(resource?.category)}</div>
             )}
           </div>
 
@@ -142,13 +187,16 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
             {isEditing ? (
               <Input
                 type="number"
-                value={formData.quantity}
-                onChange={(e) => handleChange("quantity", Number.parseInt(e.target.value))}
+                value={safeNumber(formData.quantity)}
+                onChange={(e) => {
+                  const val = e.target.value === '' ? 0 : Number.parseInt(e.target.value) || 0
+                  handleChange("quantity", val)
+                }}
                 className="col-span-1"
               />
             ) : (
               <div>
-                {resource.quantity} {resourceType === "materials" ? resource.unit : "Units"}
+                {safeNumber(resource?.quantity)} {resourceType === "materials" ? (resource?.unit || 'units') : "Units"}
               </div>
             )}
           </div>
@@ -156,11 +204,17 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
           <div className="grid grid-cols-[120px_1fr] items-center gap-4">
             <div className="font-medium text-right text-gray-500">Availability:</div>
             <div className="w-full">
-              <Progress value={(resource.available / resource.quantity) * 100} className="h-2" />
-              <div className="flex justify-between text-xs text-gray-500 mt-1">
-                <span>{resource.available} available</span>
-                <span>{resource.allocated} allocated</span>
-              </div>
+              {resource?.quantity && resource?.quantity > 0 ? (
+                <>
+                  <Progress value={((resource?.available || 0) / resource.quantity) * 100} className="h-2" />
+                  <div className="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>{safeNumber(resource?.available)} available</span>
+                    <span>{safeNumber(resource?.allocated)} allocated</span>
+                  </div>
+                </>
+              ) : (
+                <div className="text-sm text-gray-500">No availability data</div>
+              )}
             </div>
           </div>
 
@@ -168,14 +222,14 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
             <div className="font-medium text-right text-gray-500">Location:</div>
             {isEditing ? (
               <Input
-                value={formData.location}
+                value={safeString(formData.location)}
                 onChange={(e) => handleChange("location", e.target.value)}
                 className="col-span-1"
               />
             ) : (
               <div className="flex items-center">
                 <MapPin className="mr-2 h-4 w-4 text-gray-500" />
-                {resource.location}
+                {safeString(resource?.location)}
               </div>
             )}
           </div>
@@ -187,14 +241,14 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
                 <div className="font-medium text-right text-gray-500">Supplier:</div>
                 {isEditing ? (
                   <Input
-                    value={formData.supplier}
+                    value={safeString(formData.supplier)}
                     onChange={(e) => handleChange("supplier", e.target.value)}
                     className="col-span-1"
                   />
                 ) : (
                   <div className="flex items-center">
                     <Building className="mr-2 h-4 w-4 text-gray-500" />
-                    {resource.supplier}
+                    {safeString(resource?.supplier)}
                   </div>
                 )}
               </div>
@@ -204,14 +258,17 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
                 {isEditing ? (
                   <Input
                     type="number"
-                    value={formData.cost}
-                    onChange={(e) => handleChange("cost", Number.parseInt(e.target.value))}
+                    value={safeNumber(formData.cost)}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? 0 : Number.parseInt(e.target.value) || 0
+                      handleChange("cost", val)
+                    }}
                     className="col-span-1"
                   />
                 ) : (
                   <div className="flex items-center">
                     <IndianRupee className="mr-2 h-4 w-4 text-gray-500" />
-                    {formatCurrency(resource.cost)} per {resource.unit}
+                    {formatCurrency(safeNumber(resource?.cost || resource?.base_cost))} per {resource?.unit || 'unit'}
                   </div>
                 )}
               </div>
@@ -219,7 +276,7 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
               <div className="grid grid-cols-[120px_1fr] items-center gap-4">
                 <div className="font-medium text-right text-gray-500">Status:</div>
                 {isEditing ? (
-                  <Select value={formData.status} onValueChange={(value) => handleChange("status", value)}>
+                  <Select value={safeString(formData.status) || undefined} onValueChange={(value) => handleChange("status", value)}>
                     <SelectTrigger className="col-span-1">
                       <SelectValue />
                     </SelectTrigger>
@@ -230,7 +287,7 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
                     </SelectContent>
                   </Select>
                 ) : (
-                  <div>{getStatusBadge(resource.status)}</div>
+                  <div>{getStatusBadge(resource?.status)}</div>
                 )}
               </div>
 
@@ -238,7 +295,7 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
                 <div className="font-medium text-right text-gray-500">Last Updated:</div>
                 <div className="flex items-center">
                   <Calendar className="mr-2 h-4 w-4 text-gray-500" />
-                  {resource.lastUpdated}
+                  {safeString(resource?.lastUpdated || resource?.updated_at || 'N/A')}
                 </div>
               </div>
             </>
@@ -250,7 +307,7 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
               <div className="grid grid-cols-[120px_1fr] items-center gap-4">
                 <div className="font-medium text-right text-gray-500">Condition:</div>
                 {isEditing ? (
-                  <Select value={formData.condition} onValueChange={(value) => handleChange("condition", value)}>
+                  <Select value={safeString(formData.condition) || undefined} onValueChange={(value) => handleChange("condition", value)}>
                     <SelectTrigger className="col-span-1">
                       <SelectValue />
                     </SelectTrigger>
@@ -262,7 +319,7 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
                     </SelectContent>
                   </Select>
                 ) : (
-                  <div>{getConditionBadge(resource.condition)}</div>
+                  <div>{getConditionBadge(resource?.condition)}</div>
                 )}
               </div>
 
@@ -271,14 +328,17 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
                 {isEditing ? (
                   <Input
                     type="number"
-                    value={formData.dailyRate}
-                    onChange={(e) => handleChange("dailyRate", Number.parseInt(e.target.value))}
+                    value={safeNumber(formData.dailyRate)}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? 0 : Number.parseInt(e.target.value) || 0
+                      handleChange("dailyRate", val)
+                    }}
                     className="col-span-1"
                   />
                 ) : (
                   <div className="flex items-center">
                     <IndianRupee className="mr-2 h-4 w-4 text-gray-500" />
-                    {formatCurrency(resource.dailyRate)} per day
+                    {formatCurrency(safeNumber(resource?.dailyRate || resource?.daily_rate))} per day
                   </div>
                 )}
               </div>
@@ -287,20 +347,20 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
                 <div className="font-medium text-right text-gray-500">Operator:</div>
                 {isEditing ? (
                   <Input
-                    value={formData.operator}
+                    value={safeString(formData.operator)}
                     onChange={(e) => handleChange("operator", e.target.value)}
                     className="col-span-1"
                   />
                 ) : (
-                  <div>{resource.operator}</div>
+                  <div>{safeString(resource?.operator)}</div>
                 )}
               </div>
 
               <div className="grid grid-cols-[120px_1fr] items-center gap-4">
                 <div className="font-medium text-right text-gray-500">Maintenance:</div>
                 <div className="text-sm">
-                  <div>Last: {resource.lastMaintenance}</div>
-                  <div>Next: {resource.nextMaintenance}</div>
+                  <div>Last: {safeString(resource?.lastMaintenance || resource?.last_maintenance || 'N/A')}</div>
+                  <div>Next: {safeString(resource?.nextMaintenance || resource?.next_maintenance || 'N/A')}</div>
                 </div>
               </div>
             </>
@@ -313,12 +373,12 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
                 <div className="font-medium text-right text-gray-500">Supervisor:</div>
                 {isEditing ? (
                   <Input
-                    value={formData.supervisor}
+                    value={safeString(formData.supervisor)}
                     onChange={(e) => handleChange("supervisor", e.target.value)}
                     className="col-span-1"
                   />
                 ) : (
-                  <div>{resource.supervisor}</div>
+                  <div>{safeString(resource?.supervisor)}</div>
                 )}
               </div>
 
@@ -327,14 +387,17 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
                 {isEditing ? (
                   <Input
                     type="number"
-                    value={formData.dailyWage}
-                    onChange={(e) => handleChange("dailyWage", Number.parseInt(e.target.value))}
+                    value={safeNumber(formData.dailyWage)}
+                    onChange={(e) => {
+                      const val = e.target.value === '' ? 0 : Number.parseInt(e.target.value) || 0
+                      handleChange("dailyWage", val)
+                    }}
                     className="col-span-1"
                   />
                 ) : (
                   <div className="flex items-center">
                     <IndianRupee className="mr-2 h-4 w-4 text-gray-500" />
-                    {formatCurrency(resource.dailyWage)} per worker
+                    {formatCurrency(safeNumber(resource?.dailyWage || resource?.daily_wage))} per worker
                   </div>
                 )}
               </div>

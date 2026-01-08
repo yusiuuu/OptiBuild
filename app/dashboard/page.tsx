@@ -79,6 +79,10 @@ export default function DashboardPage() {
   // Project list (fetched from Supabase only)
   const [projects, setProjects] = useState<any[]>([]);
   const [projectsRefreshKey, setProjectsRefreshKey] = useState(0);
+  
+  // Dashboard metrics state
+  const [resourceUtilization, setResourceUtilization] = useState(0);
+  const [delayReduction, setDelayReduction] = useState(0);
 
   // Load projects from Supabase on component mount (no local storage fallback)
   const loadProjects = async () => {
@@ -100,8 +104,135 @@ export default function DashboardPage() {
     }
   };
 
+  // Load dashboard metrics (Resource Utilization and Delay Reduction)
+  const loadDashboardMetrics = async () => {
+    try {
+      const { 
+        resourcesCatalogService, 
+        projectsService, 
+        tasksService,
+        projectResourcesService 
+      } = await import('@/lib/data-service');
+
+      // Calculate Resource Utilization
+      // Utilization = (Total Allocated Resources / Total Available Resources) * 100
+      const allResources = await resourcesCatalogService.getResources();
+      const allProjects = await projectsService.getProjects();
+      
+      let totalAllocated = 0;
+      let totalAvailable = 0;
+      
+      // Sum up all available resources
+      totalAvailable = allResources.reduce((sum, r) => sum + (r.quantity || 0), 0);
+      
+      // Sum up all allocated resources across all projects
+      for (const project of allProjects) {
+        try {
+          const projectResources = await projectResourcesService.getProjectResources(project.id);
+          projectResources.forEach((pr: any) => {
+            if (pr.resource && pr.quantity) {
+              totalAllocated += pr.quantity;
+            }
+          });
+        } catch (err) {
+          // Skip projects with errors
+          console.warn(`Error loading resources for project ${project.id}:`, err);
+        }
+      }
+      
+      // Calculate utilization percentage
+      const utilization = totalAvailable > 0 
+        ? Math.round((totalAllocated / totalAvailable) * 100) 
+        : 0;
+      setResourceUtilization(Math.min(100, Math.max(0, utilization)));
+
+      // Calculate Delay Reduction
+      // Delay Reduction = (Tasks On Time / Total Tasks) * 100
+      // Or: Reduction = 100 - (Delayed Tasks / Total Tasks) * 100
+      let totalTasks = 0;
+      let onTimeTasks = 0;
+      
+      for (const project of allProjects) {
+        try {
+          const tasks = await tasksService.getTasks(project.id);
+          tasks.forEach((task: any) => {
+            totalTasks++;
+            if (task.end_date && task.start_date) {
+              const endDate = new Date(task.end_date);
+              const startDate = new Date(task.start_date);
+              const today = new Date();
+              
+              // Task is on time if it's completed before or on the end date
+              // Or if it's in progress and not past the end date
+              if (endDate >= today || task.status === 'completed') {
+                onTimeTasks++;
+              }
+            } else {
+              // Tasks without dates are considered on time
+              onTimeTasks++;
+            }
+          });
+        } catch (err) {
+          // Skip projects with errors
+          console.warn(`Error loading tasks for project ${project.id}:`, err);
+        }
+      }
+      
+      // Calculate delay reduction percentage
+      const reduction = totalTasks > 0 
+        ? Math.round((onTimeTasks / totalTasks) * 100) 
+        : 0;
+      setDelayReduction(Math.min(100, Math.max(0, reduction)));
+      
+    } catch (error) {
+      console.error('Error loading dashboard metrics:', error);
+      setResourceUtilization(0);
+      setDelayReduction(0);
+    }
+  };
+
+  // Load notification count
+  const loadNotificationCount = async () => {
+    try {
+      const { notificationsService } = await import('@/lib/data-service')
+      const notifications = await notificationsService.getNotifications()
+      const unread = notifications.filter(n => !notificationsService.isRead(n.id))
+      setUnreadNotificationCount(unread.length)
+    } catch (error) {
+      console.error('Error loading notification count:', error)
+    }
+  }
+
   useEffect(() => {
     loadProjects();
+    loadDashboardMetrics();
+    loadNotificationCount();
+    
+    // Refresh notification count every 30 seconds
+    const interval = setInterval(loadNotificationCount, 30000)
+    
+    // Listen for task refresh events
+    const handleTaskRefresh = () => {
+      loadDashboardMetrics()
+      loadNotificationCount()
+    }
+    
+    window.addEventListener('task-refresh', handleTaskRefresh)
+    
+    // Also listen to storage events for cross-tab communication
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'task-refresh-timestamp') {
+        handleTaskRefresh()
+      }
+    }
+    
+    window.addEventListener('storage', handleStorageChange)
+    
+    return () => {
+      clearInterval(interval)
+      window.removeEventListener('task-refresh', handleTaskRefresh)
+      window.removeEventListener('storage', handleStorageChange)
+    }
   }, []);
 
   // UI state management for various dialogs and mobile menu
@@ -113,6 +244,9 @@ export default function DashboardPage() {
   // Dashboard filtering and date range state
   const [activeFilter, setActiveFilter] = useState("all")
   const [dateRange, setDateRange] = useState("Apr 2025")
+  
+  // Notification badge count
+  const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
 
   // Handle user logout with authentication cleanup and navigation
   const handleLogout = async () => {
@@ -333,11 +467,16 @@ export default function DashboardPage() {
               </Button>
 
               {/* Notifications button with badge */}
-              <Button variant="outline" size="icon" className="relative h-9 w-9" onClick={() => setIsNotificationsOpen(true)}>
+              <Button variant="outline" size="icon" className="relative h-9 w-9" onClick={() => {
+                setIsNotificationsOpen(true)
+                loadNotificationCount() // Refresh count when opening
+              }}>
                 <Bell className="h-4 w-4" />
-                <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium text-white">
-                  3
-                </span>
+                {unreadNotificationCount > 0 && (
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium text-white">
+                    {unreadNotificationCount > 99 ? '99+' : unreadNotificationCount}
+                  </span>
+                )}
               </Button>
 
               {/* New project button (hidden on mobile) */}
@@ -409,7 +548,7 @@ export default function DashboardPage() {
               />
 
               {/* Overview Cards: Key metrics and KPIs */}
-              <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {/* Active Projects card with animation */}
               <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
                 <Card className="h-full flex flex-col">
@@ -435,8 +574,8 @@ export default function DashboardPage() {
                     <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500 flex-shrink-0" />
                   </CardHeader>
                   <CardContent className="px-3 sm:px-4 pb-3 sm:pb-4 flex-1 flex flex-col justify-end">
-                    <div className="text-xl sm:text-2xl font-bold">—</div>
-                    <Progress value={0} className="mt-2 h-1.5" />
+                    <div className="text-xl sm:text-2xl font-bold">{resourceUtilization}%</div>
+                    <Progress value={resourceUtilization} className="mt-2 h-1.5" />
                   </CardContent>
                 </Card>
               </motion.div>
@@ -453,25 +592,8 @@ export default function DashboardPage() {
                     <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500 flex-shrink-0" />
                   </CardHeader>
                   <CardContent className="px-3 sm:px-4 pb-3 sm:pb-4 flex-1 flex flex-col justify-end">
-                    <div className="text-xl sm:text-2xl font-bold">—</div>
-                    <Progress value={0} className="mt-2 h-1.5" />
-                  </CardContent>
-                </Card>
-              </motion.div>
-              
-              {/* Carbon Footprint card showing environmental impact */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.3 }}
-              >
-                <Card className="h-full flex flex-col">
-                  <CardHeader className="flex flex-row items-center justify-between pb-1.5 px-3 sm:px-4 pt-3 sm:pt-4 flex-shrink-0">
-                    <CardTitle className="text-xs sm:text-sm font-medium truncate pr-2">Carbon Footprint</CardTitle>
-                    <Layers className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500 flex-shrink-0" />
-                  </CardHeader>
-                  <CardContent className="px-3 sm:px-4 pb-3 sm:pb-4 flex-1 flex items-end">
-                    <div className="text-xl sm:text-2xl font-bold">—</div>
+                    <div className="text-xl sm:text-2xl font-bold">{delayReduction}%</div>
+                    <Progress value={delayReduction} className="mt-2 h-1.5" />
                   </CardContent>
                 </Card>
               </motion.div>
@@ -544,7 +666,17 @@ export default function DashboardPage() {
       />
 
       {/* Notifications dialog for viewing system alerts and updates */}
-      <NotificationsDialog open={isNotificationsOpen} onOpenChange={setIsNotificationsOpen} />
+      <NotificationsDialog 
+        open={isNotificationsOpen} 
+        onOpenChange={(open) => {
+          setIsNotificationsOpen(open)
+          if (!open) {
+            // Refresh count when dialog closes
+            loadNotificationCount()
+          }
+        }}
+        onNotificationRead={loadNotificationCount}
+      />
     </SidebarProvider>
   )
 }

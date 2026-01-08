@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -20,7 +20,10 @@ import {
   Edit,
   Save,
 } from "lucide-react"
-import { format } from "date-fns"
+import { format, parseISO, isValid } from "date-fns"
+import { tasksService } from "@/lib/data-service"
+import { triggerTaskRefresh } from "@/lib/task-refresh"
+import { toast } from "sonner"
 
 interface TaskDetailsDialogProps {
   open: boolean
@@ -32,12 +35,48 @@ export function TaskDetailsDialog({ open, onOpenChange, task }: TaskDetailsDialo
   const [isEditing, setIsEditing] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
-  const [status, setStatus] = useState(task.status)
-  const [completion, setCompletion] = useState(task.completion)
+  const [status, setStatus] = useState(task?.status || "not-started")
+  const [completion, setCompletion] = useState(task?.completion || task?.progress || 0)
   const [notes, setNotes] = useState("")
 
+  // Helper function to safely format dates
+  const formatDate = (date: Date | string | undefined | null): string => {
+    if (!date) return "Not set"
+    
+    let dateObj: Date
+    if (typeof date === "string") {
+      dateObj = parseISO(date)
+    } else {
+      dateObj = date
+    }
+    
+    if (!isValid(dateObj)) return "Invalid date"
+    
+    return format(dateObj, "dd MMM yyyy")
+  }
+
+  // Get task properties safely
+  const taskTitle = task?.title || task?.name || "Untitled Task"
+  const taskProject = task?.projectName || task?.project?.name || task?.project || "Unknown Project"
+  const taskAssignedTo = task?.assignedTo || task?.assigned_team_member?.name || "Unassigned"
+  const taskDescription = task?.description || "No description available"
+  const taskPriority = task?.priority || "medium"
+  
+  // Get dates safely
+  const startDate = task?.startDate || (task?.start_date ? parseISO(task.start_date) : null)
+  const endDate = task?.endDate || (task?.end_date ? parseISO(task.end_date) : null)
+
+  // Update state when task changes
+  useEffect(() => {
+    if (task) {
+      setStatus(task.status || "not-started")
+      setCompletion(task.completion || task.progress || 0)
+    }
+  }, [task])
+
   const getStatusBadge = (status: string) => {
-    switch (status) {
+    const normalizedStatus = status?.toLowerCase().replace(/_/g, "-") || "not-started"
+    switch (normalizedStatus) {
       case "completed":
         return (
           <Badge className="bg-green-500">
@@ -45,12 +84,15 @@ export function TaskDetailsDialog({ open, onOpenChange, task }: TaskDetailsDialo
           </Badge>
         )
       case "in-progress":
+      case "in_progress":
         return (
           <Badge className="bg-blue-500">
             <Clock className="mr-1 h-3 w-3" /> In Progress
           </Badge>
         )
       case "not-started":
+      case "not_started":
+      case "pending":
         return (
           <Badge className="bg-gray-500">
             <Clock4 className="mr-1 h-3 w-3" /> Not Started
@@ -63,30 +105,65 @@ export function TaskDetailsDialog({ open, onOpenChange, task }: TaskDetailsDialo
           </Badge>
         )
       default:
-        return <Badge>Unknown</Badge>
+        return <Badge>{status || "Unknown"}</Badge>
     }
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!task?.id) {
+      toast.error('Task ID is missing')
+      return
+    }
+
     setIsSaving(true)
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsSaving(false)
+    try {
+      await tasksService.updateTask(task.id, {
+        status: status as any,
+        progress: completion,
+      })
+
+      toast.success('Task updated successfully')
+      
+      // Trigger global refresh
+      triggerTaskRefresh()
+      
       setIsEditing(false)
-      // In a real app, you would update the task data here
-    }, 1500)
+    } catch (error: any) {
+      console.error('Error updating task:', error)
+      toast.error(error.message || 'Failed to update task')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
+    if (!task?.id) {
+      toast.error('Task ID is missing')
+      return
+    }
+
+    if (!confirm('Are you sure you want to delete this task? This action cannot be undone.')) {
+      return
+    }
+
     setIsDeleting(true)
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsDeleting(false)
+    try {
+      await tasksService.deleteTask(task.id)
+      
+      toast.success('Task deleted successfully')
+      
+      // Trigger global refresh
+      triggerTaskRefresh()
+      
       onOpenChange(false)
-      // In a real app, you would delete the task here
-    }, 1500)
+    } catch (error: any) {
+      console.error('Error deleting task:', error)
+      toast.error(error.message || 'Failed to delete task')
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   return (
@@ -94,7 +171,7 @@ export function TaskDetailsDialog({ open, onOpenChange, task }: TaskDetailsDialo
       <DialogContent className="sm:max-w-[525px]">
         <DialogHeader>
           <DialogTitle className="flex items-center justify-between">
-            <span>{task.title}</span>
+            <span>{taskTitle}</span>
             {getStatusBadge(status)}
           </DialogTitle>
         </DialogHeader>
@@ -104,7 +181,7 @@ export function TaskDetailsDialog({ open, onOpenChange, task }: TaskDetailsDialo
             <div className="font-medium text-right text-gray-500">Project:</div>
             <div className="flex items-center">
               <Building className="mr-2 h-4 w-4 text-gray-500" />
-              {task.project}
+              {taskProject}
             </div>
           </div>
 
@@ -112,7 +189,7 @@ export function TaskDetailsDialog({ open, onOpenChange, task }: TaskDetailsDialo
             <div className="font-medium text-right text-gray-500">Assigned To:</div>
             <div className="flex items-center">
               <Users className="mr-2 h-4 w-4 text-gray-500" />
-              {task.assignedTo}
+              {taskAssignedTo}
             </div>
           </div>
 
@@ -120,7 +197,7 @@ export function TaskDetailsDialog({ open, onOpenChange, task }: TaskDetailsDialo
             <div className="font-medium text-right text-gray-500">Timeline:</div>
             <div className="flex items-center">
               <Calendar className="mr-2 h-4 w-4 text-gray-500" />
-              {format(task.startDate, "dd MMM yyyy")} - {format(task.endDate, "dd MMM yyyy")}
+              {formatDate(startDate)} - {formatDate(endDate)}
             </div>
           </div>
 
@@ -130,21 +207,21 @@ export function TaskDetailsDialog({ open, onOpenChange, task }: TaskDetailsDialo
               <Badge
                 variant="outline"
                 className={
-                  task.priority === "high"
+                  taskPriority === "high"
                     ? "border-red-500 text-red-700"
-                    : task.priority === "medium"
+                    : taskPriority === "medium"
                       ? "border-amber-500 text-amber-700"
                       : "border-blue-500 text-blue-700"
                 }
               >
-                {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
+                {taskPriority.charAt(0).toUpperCase() + taskPriority.slice(1)}
               </Badge>
             </div>
           </div>
 
           <div className="grid grid-cols-[120px_1fr] items-start gap-4">
             <div className="font-medium text-right text-gray-500">Description:</div>
-            <div className="text-sm">{task.description}</div>
+            <div className="text-sm">{taskDescription}</div>
           </div>
 
           <div className="grid grid-cols-[120px_1fr] items-start gap-4">
@@ -252,4 +329,5 @@ export function TaskDetailsDialog({ open, onOpenChange, task }: TaskDetailsDialo
     </Dialog>
   )
 }
+
 

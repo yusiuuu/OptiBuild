@@ -66,6 +66,27 @@ export function ProjectVisualizations({ refreshKey }: { refreshKey?: number }) {
     }
 
     loadData()
+    
+    // Listen for task refresh events
+    const handleTaskRefresh = () => {
+      loadData()
+    }
+    
+    window.addEventListener('task-refresh', handleTaskRefresh)
+    
+    // Also listen to storage events for cross-tab communication
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'task-refresh-timestamp') {
+        handleTaskRefresh()
+      }
+    }
+    
+    window.addEventListener('storage', handleStorageChange)
+    
+    return () => {
+      window.removeEventListener('task-refresh', handleTaskRefresh)
+      window.removeEventListener('storage', handleStorageChange)
+    }
   }, [user, refreshKey])
 
   // Prepare data for status distribution pie chart

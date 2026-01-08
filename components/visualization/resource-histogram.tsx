@@ -99,7 +99,12 @@ export function ResourceHistogram({
   // Generate utilization data
   useEffect(() => {
     const generateUtilizationData = () => {
-      const utilization: ResourceUtilization[] = resources.map(resource => {
+      // Filter out duplicate resources by ID to prevent duplicate keys
+      const uniqueResources = resources.filter((resource, index, self) => 
+        index === self.findIndex((r) => r.id === resource.id)
+      )
+      
+      const utilization: ResourceUtilization[] = uniqueResources.map((resource, index) => {
         const totalAllocated = resource.quantity || 0
         const totalAvailable = totalAllocated // Without simulation; show as equal if not provided
         const utilizationPercent = totalAvailable > 0 ? Math.round((totalAllocated / totalAvailable) * 100) : 0
@@ -107,7 +112,7 @@ export function ResourceHistogram({
         const averageUtilization = utilizationPercent
 
         return {
-          resourceId: resource.id || '',
+          resourceId: resource.id || `resource-${index}`, // Fallback to index-based ID if no ID
           resourceName: resource.name,
           type: resource.type,
           totalAllocated,
@@ -365,8 +370,8 @@ export function ResourceHistogram({
 
         <CardContent>
           <div className="space-y-4">
-            {utilizationData.map((resource) => (
-              <div key={resource.resourceId} className="p-4 border rounded-lg">
+            {utilizationData.map((resource, index) => (
+              <div key={`${resource.resourceId}-${index}`} className="p-4 border rounded-lg">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
                     {getResourceIcon(resource.type)}

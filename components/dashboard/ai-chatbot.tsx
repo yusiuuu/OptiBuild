@@ -44,7 +44,7 @@ export function AIChatbot() {
     
     try {
       // Send message to AI backend API endpoint
-      const response = await fetch("http://127.0.0.1:5000/chat", {
+      const response = await fetch("https://cdn.botpress.cloud/webchat/v3.3/shareable.html?configUrl=https://files.bpcontent.cloud/2025/11/23/07/20251123073402-UT1AFS8K.json", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

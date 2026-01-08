@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   Dialog,
   DialogContent,
@@ -20,6 +20,9 @@ import { CalendarIcon, Loader2 } from "lucide-react"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { format } from "date-fns"
+import { projectsService, tasksService, projectTeamMembersService } from "@/lib/data-service"
+import { triggerTaskRefresh } from "@/lib/task-refresh"
+import { toast } from "sonner"
 
 interface NewTaskDialogProps {
   open: boolean
@@ -28,40 +31,118 @@ interface NewTaskDialogProps {
 
 export function NewTaskDialog({ open, onOpenChange }: NewTaskDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
   const [taskName, setTaskName] = useState("")
   const [project, setProject] = useState("")
   const [assignee, setAssignee] = useState("")
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
-  const [priority, setPriority] = useState("")
+  const [priority, setPriority] = useState("medium")
   const [description, setDescription] = useState("")
 
-  // Mock data for dropdowns
-  const projects = [
-    { id: "tech-park", name: "Lakshmi Tech Park" },
-    { id: "residency", name: "Ganga Residency" },
-    { id: "highway", name: "Mumbai-Pune Highway Extension" },
-    { id: "mall", name: "Ganesh Shopping Mall" },
-  ]
+  const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([])
+  const [teamMembers, setTeamMembers] = useState<Array<{ id: string; name: string }>>([])
 
-  const employees = [
-    { id: "emp1", name: "Rajesh Kumar" },
-    { id: "emp2", name: "Vikram Singh" },
-    { id: "emp3", name: "Anand Sharma" },
-    { id: "emp4", name: "Suresh Patel" },
-    { id: "emp5", name: "Amit Verma" },
-    { id: "emp6", name: "Rahul Gupta" },
-    { id: "emp7", name: "Priya Sharma" },
-    { id: "emp8", name: "Deepak Joshi" },
-  ]
+  // Load projects and team members when dialog opens
+  useEffect(() => {
+    if (open) {
+      const loadData = async () => {
+        setIsLoading(true)
+        try {
+          // Load all projects
+          const allProjects = await projectsService.getProjects()
+          setProjects(allProjects.map(p => ({ id: p.id || '', name: p.name })))
+        } catch (error: any) {
+          console.error('Error loading projects:', error)
+          toast.error('Failed to load projects')
+        } finally {
+          setIsLoading(false)
+        }
+      }
+      loadData()
+    } else {
+      // Reset form when dialog closes
+      setTaskName("")
+      setProject("")
+      setAssignee("")
+      setStartDate(undefined)
+      setEndDate(undefined)
+      setPriority("medium")
+      setDescription("")
+      setTeamMembers([])
+    }
+  }, [open])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  // Load team members when project is selected
+  useEffect(() => {
+    if (project) {
+      const loadTeamMembers = async () => {
+        try {
+          const projectTeam = await projectTeamMembersService.getProjectTeamMembers(project)
+          setTeamMembers(
+            projectTeam
+              .filter(ptm => ptm.team_member !== null && ptm.team_member !== undefined)
+              .map(ptm => ({
+                id: ptm.id || '',
+                name: ptm.team_member?.name || 'Unknown',
+              }))
+          )
+          // Reset assignee when project changes
+          setAssignee("")
+        } catch (error: any) {
+          console.warn('Could not load team members:', error)
+          setTeamMembers([])
+        }
+      }
+      loadTeamMembers()
+    } else {
+      setTeamMembers([])
+      setAssignee("")
+    }
+  }, [project])
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    if (!project) {
+      toast.error('Please select a project')
+      return
+    }
+
     setIsSubmitting(true)
 
-    // Simulate API call
-    setTimeout(() => {
-      setIsSubmitting(false)
+    try {
+      // Format dates for database
+      const startDateStr = startDate ? format(startDate, 'yyyy-MM-dd') : undefined
+      const endDateStr = endDate ? format(endDate, 'yyyy-MM-dd') : undefined
+
+      // Calculate duration if both dates are provided
+      let durationDays: number | undefined = undefined
+      if (startDate && endDate) {
+        const diffTime = Math.abs(endDate.getTime() - startDate.getTime())
+        durationDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+      }
+
+      // Create task
+      await tasksService.createTask({
+        project_id: project,
+        title: taskName,
+        description: description || undefined,
+        start_date: startDateStr,
+        end_date: endDateStr,
+        duration_days: durationDays,
+        priority: priority as 'high' | 'medium' | 'low',
+        status: 'not-started',
+        progress: 0,
+        assigned_to: assignee || undefined,
+      })
+
+      toast.success('Task created successfully')
+      
+      // Trigger global refresh
+      triggerTaskRefresh()
+      
+      // Close dialog
       onOpenChange(false)
 
       // Reset form
@@ -70,11 +151,14 @@ export function NewTaskDialog({ open, onOpenChange }: NewTaskDialogProps) {
       setAssignee("")
       setStartDate(undefined)
       setEndDate(undefined)
-      setPriority("")
+      setPriority("medium")
       setDescription("")
-
-      // In a real app, you would save the task data here
-    }, 1500)
+    } catch (error: any) {
+      console.error('Error creating task:', error)
+      toast.error(error.message || 'Failed to create task')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -96,13 +180,14 @@ export function NewTaskDialog({ open, onOpenChange }: NewTaskDialogProps) {
                 onChange={(e) => setTaskName(e.target.value)}
                 className="col-span-3"
                 required
+                disabled={isLoading}
               />
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="project" className="text-right">
                 Project
               </Label>
-              <Select value={project} onValueChange={setProject} required>
+              <Select value={project} onValueChange={setProject} required disabled={isLoading}>
                 <SelectTrigger id="project" className="col-span-3">
                   <SelectValue placeholder="Select project" />
                 </SelectTrigger>
@@ -119,16 +204,22 @@ export function NewTaskDialog({ open, onOpenChange }: NewTaskDialogProps) {
               <Label htmlFor="assignee" className="text-right">
                 Assign To
               </Label>
-              <Select value={assignee} onValueChange={setAssignee} required>
+              <Select value={assignee} onValueChange={setAssignee} disabled={!project || isLoading}>
                 <SelectTrigger id="assignee" className="col-span-3">
-                  <SelectValue placeholder="Select employee" />
+                  <SelectValue placeholder={project ? "Select team member" : "Select project first"} />
                 </SelectTrigger>
                 <SelectContent>
-                  {employees.map((emp) => (
-                    <SelectItem key={emp.id} value={emp.id}>
-                      {emp.name}
+                  {teamMembers.length > 0 ? (
+                    teamMembers.map((tm) => (
+                      <SelectItem key={tm.id} value={tm.id}>
+                        {tm.name}
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="" disabled>
+                      {project ? "No team members available" : "Select project first"}
                     </SelectItem>
-                  ))}
+                  )}
                 </SelectContent>
               </Select>
             </div>
@@ -138,7 +229,7 @@ export function NewTaskDialog({ open, onOpenChange }: NewTaskDialogProps) {
               </Label>
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" className="col-span-3 justify-start text-left font-normal" id="start-date">
+                  <Button variant="outline" className="col-span-3 justify-start text-left font-normal" id="start-date" disabled={isLoading}>
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {startDate ? format(startDate, "PPP") : "Select start date"}
                   </Button>
@@ -154,7 +245,7 @@ export function NewTaskDialog({ open, onOpenChange }: NewTaskDialogProps) {
               </Label>
               <Popover>
                 <PopoverTrigger asChild>
-                  <Button variant="outline" className="col-span-3 justify-start text-left font-normal" id="end-date">
+                  <Button variant="outline" className="col-span-3 justify-start text-left font-normal" id="end-date" disabled={isLoading}>
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {endDate ? format(endDate, "PPP") : "Select end date"}
                   </Button>
@@ -174,7 +265,7 @@ export function NewTaskDialog({ open, onOpenChange }: NewTaskDialogProps) {
               <Label htmlFor="priority" className="text-right">
                 Priority
               </Label>
-              <Select value={priority} onValueChange={setPriority} required>
+              <Select value={priority} onValueChange={setPriority} required disabled={isLoading}>
                 <SelectTrigger id="priority" className="col-span-3">
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
@@ -195,14 +286,15 @@ export function NewTaskDialog({ open, onOpenChange }: NewTaskDialogProps) {
                 onChange={(e) => setDescription(e.target.value)}
                 className="col-span-3"
                 rows={3}
+                disabled={isLoading}
               />
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>
               Cancel
             </Button>
-            <Button type="submit" disabled={isSubmitting}>
+            <Button type="submit" disabled={isSubmitting || isLoading}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -218,4 +310,3 @@ export function NewTaskDialog({ open, onOpenChange }: NewTaskDialogProps) {
     </Dialog>
   )
 }
-

@@ -1685,3 +1685,168 @@ export const enhancedProjectsService = {
     return createdProject
   }
 }
+
+// ============================================================================
+// NOTIFICATIONS SERVICE
+// ============================================================================
+
+export interface Notification {
+  id: string
+  user_id: string
+  type: 'alert' | 'update' | 'info'
+  title: string
+  message: string
+  read: boolean
+  created_at: string
+  project_id?: string
+  resource_id?: string
+}
+
+// Notifications Service
+// Handles real-time notifications based on actual project and resource data
+export const notificationsService = {
+  // Get all notifications for the current user
+  async getNotifications(): Promise<Notification[]> {
+    const { data: userData, error: userError } = await supabase.auth.getUser()
+    if (userError) throw userError
+
+    // Generate real-time notifications based on actual data
+    const notifications: Notification[] = []
+
+    try {
+      // Get all projects for the user
+      const projects = await projectsService.getProjects()
+      
+      // Get all resources
+      const resources = await resourcesCatalogService.getResources()
+      
+      // Check for resource shortages
+      for (const resource of resources) {
+        if (resource.quantity && resource.quantity < 10) {
+          notifications.push({
+            id: `resource-shortage-${resource.id}`,
+            user_id: userData.user.id,
+            type: 'alert',
+            title: 'Resource Shortage Alert',
+            message: `${resource.name} is running low (${resource.quantity} remaining). Please restock soon.`,
+            read: false,
+            created_at: new Date().toISOString(),
+            resource_id: resource.id,
+          })
+        }
+      }
+
+      // Check for budget overruns
+      for (const project of projects) {
+        if (project.budget) {
+          try {
+            const expenses = await expensesService.getProjectExpenses(project.id)
+            const totalExpenses = expenses.reduce((sum: number, exp: any) => sum + (exp.amount || 0), 0)
+            const budget = Number(project.budget)
+            
+            if (budget > 0 && totalExpenses > budget * 1.05) {
+              const overrunPercent = ((totalExpenses - budget) / budget * 100).toFixed(1)
+              notifications.push({
+                id: `budget-overrun-${project.id}`,
+                user_id: userData.user.id,
+                type: 'alert',
+                title: 'Budget Overrun',
+                message: `${project.name} is currently ${overrunPercent}% over budget. Review required.`,
+                read: false,
+                created_at: new Date().toISOString(),
+                project_id: project.id,
+              })
+            }
+          } catch (err) {
+            // Skip projects with errors
+            console.warn(`Error checking budget for project ${project.id}:`, err)
+          }
+        }
+      }
+
+      // Check for delayed tasks
+      for (const project of projects) {
+        try {
+          const tasks = await tasksService.getTasks(project.id)
+          const today = new Date()
+          today.setHours(0, 0, 0, 0)
+          
+          const delayedTasks = tasks.filter((task: any) => {
+            if (!task.end_date) return false
+            const endDate = new Date(task.end_date)
+            endDate.setHours(0, 0, 0, 0)
+            return endDate < today && task.status !== 'completed'
+          })
+
+          if (delayedTasks.length > 0) {
+            notifications.push({
+              id: `delayed-tasks-${project.id}`,
+              user_id: userData.user.id,
+              type: 'alert',
+              title: 'Delayed Tasks',
+              message: `${project.name} has ${delayedTasks.length} task(s) past their due date. Action required.`,
+              read: false,
+              created_at: new Date().toISOString(),
+              project_id: project.id,
+            })
+          }
+        } catch (err) {
+          // Skip projects with errors
+          console.warn(`Error checking tasks for project ${project.id}:`, err)
+        }
+      }
+
+      // Check for schedule updates (recently updated projects)
+      for (const project of projects) {
+        if (project.updated_at) {
+          const updatedAt = new Date(project.updated_at)
+          const hoursSinceUpdate = (Date.now() - updatedAt.getTime()) / (1000 * 60 * 60)
+          
+          if (hoursSinceUpdate < 24) {
+            notifications.push({
+              id: `schedule-updated-${project.id}-${project.updated_at}`,
+              user_id: userData.user.id,
+              type: 'update',
+              title: 'Schedule Updated',
+              message: `The schedule for ${project.name} has been recently updated.`,
+              read: false,
+              created_at: project.updated_at,
+              project_id: project.id,
+            })
+          }
+        }
+      }
+
+      // Sort by created_at (newest first)
+      notifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      
+      return notifications
+    } catch (error) {
+      console.error('Error generating notifications:', error)
+      return []
+    }
+  },
+
+  // Mark notification as read
+  async markAsRead(notificationId: string): Promise<void> {
+    // Since we're generating notifications on-the-fly, we'll store read status in localStorage
+    const readNotifications = JSON.parse(localStorage.getItem('readNotifications') || '[]')
+    if (!readNotifications.includes(notificationId)) {
+      readNotifications.push(notificationId)
+      localStorage.setItem('readNotifications', JSON.stringify(readNotifications))
+    }
+  },
+
+  // Mark all notifications as read
+  async markAllAsRead(): Promise<void> {
+    const notifications = await this.getNotifications()
+    const readNotifications = notifications.map(n => n.id)
+    localStorage.setItem('readNotifications', JSON.stringify(readNotifications))
+  },
+
+  // Get read status for a notification
+  isRead(notificationId: string): boolean {
+    const readNotifications = JSON.parse(localStorage.getItem('readNotifications') || '[]')
+    return readNotifications.includes(notificationId)
+  }
+}
