@@ -1,5 +1,6 @@
 "use client"
 
+import { useMemo, useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Filter, Calendar } from "lucide-react"
 import {
@@ -10,6 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import { format } from "date-fns"
 
 // Props interface for the dashboard header component
 // Manages filter state and date range selection for dashboard data
@@ -31,8 +33,51 @@ export function DashboardHeader({ activeFilter, setActiveFilter, dateRange, setD
     { id: "completed", label: "Completed" },
   ]
 
-  // Available date ranges for time-based filtering
-  const dateRanges = ["Apr 2025", "Mar 2025", "Feb 2025", "Jan 2025", "Q1 2025", "Q4 2024"]
+  // State to force re-calculation of date ranges (updates every minute for real-time)
+  const [refreshKey, setRefreshKey] = useState(0)
+  
+  // Update date ranges every minute to keep them current
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setRefreshKey(prev => prev + 1)
+    }, 60000) // Update every minute
+    
+    return () => clearInterval(interval)
+  }, [])
+
+  // Generate real-time date ranges dynamically
+  const dateRanges = useMemo(() => {
+    const now = new Date()
+    const currentMonth = format(now, "MMM yyyy") // e.g., "Dec 2024"
+    const currentYear = format(now, "yyyy")
+    
+    // Get previous months
+    const prevMonths: string[] = []
+    for (let i = 1; i <= 3; i++) {
+      const date = new Date(now.getFullYear(), now.getMonth() - i, 1)
+      prevMonths.push(format(date, "MMM yyyy"))
+    }
+    
+    // Get current quarter
+    const currentQuarter = Math.floor(now.getMonth() / 3) + 1
+    const currentQuarterLabel = `Q${currentQuarter} ${currentYear}`
+    
+    // Get previous quarter
+    const prevQuarter = currentQuarter === 1 ? 4 : currentQuarter - 1
+    const prevQuarterYear = currentQuarter === 1 ? parseInt(currentYear) - 1 : parseInt(currentYear)
+    const prevQuarterLabel = `Q${prevQuarter} ${prevQuarterYear}`
+    
+    return [
+      "Today",
+      "This Week",
+      currentMonth, // Current month
+      ...prevMonths, // Previous 3 months
+      currentQuarterLabel, // Current quarter
+      prevQuarterLabel, // Previous quarter
+      `This Year (${currentYear})`,
+      "All Time"
+    ]
+  }, [refreshKey]) // Recalculate when refreshKey changes
 
   return (
     <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 sm:gap-4 mb-2 sm:mb-4">
@@ -87,7 +132,7 @@ export function DashboardHeader({ activeFilter, setActiveFilter, dateRange, setD
               <DropdownMenuItem
                 key={range}
                 onClick={() => setDateRange(range)}
-                className={dateRange === range ? "bg-gray-100 dark:bg-gray-800" : ""}
+                className={dateRange === range ? "bg-gray-100 dark:bg-gray-800 font-semibold" : ""}
               >
                 {range}
               </DropdownMenuItem>

@@ -187,6 +187,7 @@ ALTER TABLE public.expenses ENABLE ROW LEVEL SECURITY;
 -- ============================================================================
 
 -- Project Team Members Policies
+DROP POLICY IF EXISTS "Users can view project team members for own projects" ON public.project_team_members;
 CREATE POLICY "Users can view project team members for own projects" 
 ON public.project_team_members FOR SELECT 
 USING (
@@ -197,6 +198,7 @@ USING (
     )
 );
 
+DROP POLICY IF EXISTS "Users can add team members to own projects" ON public.project_team_members;
 CREATE POLICY "Users can add team members to own projects" 
 ON public.project_team_members FOR INSERT 
 WITH CHECK (
@@ -212,6 +214,7 @@ WITH CHECK (
     )
 );
 
+DROP POLICY IF EXISTS "Users can update project team members for own projects" ON public.project_team_members;
 CREATE POLICY "Users can update project team members for own projects" 
 ON public.project_team_members FOR UPDATE 
 USING (
@@ -222,6 +225,7 @@ USING (
     )
 );
 
+DROP POLICY IF EXISTS "Users can delete project team members from own projects" ON public.project_team_members;
 CREATE POLICY "Users can delete project team members from own projects" 
 ON public.project_team_members FOR DELETE 
 USING (
@@ -233,10 +237,12 @@ USING (
 );
 
 -- Tasks Policies
+DROP POLICY IF EXISTS "Users can view tasks for own projects" ON public.tasks;
 CREATE POLICY "Users can view tasks for own projects" 
 ON public.tasks FOR SELECT 
 USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can create tasks for own projects" ON public.tasks;
 CREATE POLICY "Users can create tasks for own projects" 
 ON public.tasks FOR INSERT 
 WITH CHECK (
@@ -248,32 +254,39 @@ WITH CHECK (
     )
 );
 
+DROP POLICY IF EXISTS "Users can update own tasks" ON public.tasks;
 CREATE POLICY "Users can update own tasks" 
 ON public.tasks FOR UPDATE 
 USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own tasks" ON public.tasks;
 CREATE POLICY "Users can delete own tasks" 
 ON public.tasks FOR DELETE 
 USING (auth.uid() = user_id);
 
 -- Resources Policies (Global Catalog)
+DROP POLICY IF EXISTS "Users can view own resources" ON public.resources;
 CREATE POLICY "Users can view own resources" 
 ON public.resources FOR SELECT 
 USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can create own resources" ON public.resources;
 CREATE POLICY "Users can create own resources" 
 ON public.resources FOR INSERT 
 WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own resources" ON public.resources;
 CREATE POLICY "Users can update own resources" 
 ON public.resources FOR UPDATE 
 USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own resources" ON public.resources;
 CREATE POLICY "Users can delete own resources" 
 ON public.resources FOR DELETE 
 USING (auth.uid() = user_id);
 
 -- Project Resources Policies
+DROP POLICY IF EXISTS "Users can view project resources for own projects" ON public.project_resources;
 CREATE POLICY "Users can view project resources for own projects" 
 ON public.project_resources FOR SELECT 
 USING (
@@ -284,6 +297,7 @@ USING (
     )
 );
 
+DROP POLICY IF EXISTS "Users can assign resources to own projects" ON public.project_resources;
 CREATE POLICY "Users can assign resources to own projects" 
 ON public.project_resources FOR INSERT 
 WITH CHECK (
@@ -299,6 +313,7 @@ WITH CHECK (
     )
 );
 
+DROP POLICY IF EXISTS "Users can update project resources for own projects" ON public.project_resources;
 CREATE POLICY "Users can update project resources for own projects" 
 ON public.project_resources FOR UPDATE 
 USING (
@@ -309,6 +324,7 @@ USING (
     )
 );
 
+DROP POLICY IF EXISTS "Users can remove resources from own projects" ON public.project_resources;
 CREATE POLICY "Users can remove resources from own projects" 
 ON public.project_resources FOR DELETE 
 USING (
@@ -320,11 +336,13 @@ USING (
 );
 
 -- Constraints Master Policies (Read-only for all authenticated users)
+DROP POLICY IF EXISTS "All authenticated users can view constraints master" ON public.constraints_master;
 CREATE POLICY "All authenticated users can view constraints master" 
 ON public.constraints_master FOR SELECT 
 USING (auth.role() = 'authenticated');
 
 -- Project Constraints Policies
+DROP POLICY IF EXISTS "Users can view project constraints for own projects" ON public.project_constraints;
 CREATE POLICY "Users can view project constraints for own projects" 
 ON public.project_constraints FOR SELECT 
 USING (
@@ -335,6 +353,7 @@ USING (
     )
 );
 
+DROP POLICY IF EXISTS "Users can add constraints to own projects" ON public.project_constraints;
 CREATE POLICY "Users can add constraints to own projects" 
 ON public.project_constraints FOR INSERT 
 WITH CHECK (
@@ -345,6 +364,7 @@ WITH CHECK (
     )
 );
 
+DROP POLICY IF EXISTS "Users can update project constraints for own projects" ON public.project_constraints;
 CREATE POLICY "Users can update project constraints for own projects" 
 ON public.project_constraints FOR UPDATE 
 USING (
@@ -355,6 +375,7 @@ USING (
     )
 );
 
+DROP POLICY IF EXISTS "Users can remove constraints from own projects" ON public.project_constraints;
 CREATE POLICY "Users can remove constraints from own projects" 
 ON public.project_constraints FOR DELETE 
 USING (
@@ -366,6 +387,7 @@ USING (
 );
 
 -- Budget Categories Policies
+DROP POLICY IF EXISTS "Users can view budget categories for own projects" ON public.budget_categories;
 CREATE POLICY "Users can view budget categories for own projects" 
 ON public.budget_categories FOR SELECT 
 USING (
@@ -376,6 +398,7 @@ USING (
     )
 );
 
+DROP POLICY IF EXISTS "Users can create budget categories for own projects" ON public.budget_categories;
 CREATE POLICY "Users can create budget categories for own projects" 
 ON public.budget_categories FOR INSERT 
 WITH CHECK (
@@ -386,6 +409,7 @@ WITH CHECK (
     )
 );
 
+DROP POLICY IF EXISTS "Users can update budget categories for own projects" ON public.budget_categories;
 CREATE POLICY "Users can update budget categories for own projects" 
 ON public.budget_categories FOR UPDATE 
 USING (
@@ -396,6 +420,7 @@ USING (
     )
 );
 
+DROP POLICY IF EXISTS "Users can delete budget categories from own projects" ON public.budget_categories;
 CREATE POLICY "Users can delete budget categories from own projects" 
 ON public.budget_categories FOR DELETE 
 USING (
@@ -407,10 +432,12 @@ USING (
 );
 
 -- Expenses Policies
+DROP POLICY IF EXISTS "Users can view expenses for own projects" ON public.expenses;
 CREATE POLICY "Users can view expenses for own projects" 
 ON public.expenses FOR SELECT 
 USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can create expenses for own projects" ON public.expenses;
 CREATE POLICY "Users can create expenses for own projects" 
 ON public.expenses FOR INSERT 
 WITH CHECK (
@@ -422,10 +449,12 @@ WITH CHECK (
     )
 );
 
+DROP POLICY IF EXISTS "Users can update own expenses" ON public.expenses;
 CREATE POLICY "Users can update own expenses" 
 ON public.expenses FOR UPDATE 
 USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own expenses" ON public.expenses;
 CREATE POLICY "Users can delete own expenses" 
 ON public.expenses FOR DELETE 
 USING (auth.uid() = user_id);
@@ -499,18 +528,21 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Trigger to update budget category when expense is inserted
+DROP TRIGGER IF EXISTS trigger_update_budget_on_expense_insert ON public.expenses;
 CREATE TRIGGER trigger_update_budget_on_expense_insert
 AFTER INSERT ON public.expenses
 FOR EACH ROW
 EXECUTE FUNCTION update_budget_category_actual();
 
 -- Trigger to update budget category when expense is updated
+DROP TRIGGER IF EXISTS trigger_update_budget_on_expense_update ON public.expenses;
 CREATE TRIGGER trigger_update_budget_on_expense_update
 AFTER UPDATE ON public.expenses
 FOR EACH ROW
 EXECUTE FUNCTION update_budget_category_actual();
 
 -- Trigger to update budget category when expense is deleted
+DROP TRIGGER IF EXISTS trigger_update_budget_on_expense_delete ON public.expenses;
 CREATE TRIGGER trigger_update_budget_on_expense_delete
 AFTER DELETE ON public.expenses
 FOR EACH ROW
@@ -526,31 +558,37 @@ END;
 $$ LANGUAGE plpgsql;
 
 -- Add updated_at triggers to new tables
+DROP TRIGGER IF EXISTS update_project_team_members_updated_at ON public.project_team_members;
 CREATE TRIGGER update_project_team_members_updated_at
 BEFORE UPDATE ON public.project_team_members
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_tasks_updated_at ON public.tasks;
 CREATE TRIGGER update_tasks_updated_at
 BEFORE UPDATE ON public.tasks
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_resources_updated_at ON public.resources;
 CREATE TRIGGER update_resources_updated_at
 BEFORE UPDATE ON public.resources
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_project_resources_updated_at ON public.project_resources;
 CREATE TRIGGER update_project_resources_updated_at
 BEFORE UPDATE ON public.project_resources
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_budget_categories_updated_at ON public.budget_categories;
 CREATE TRIGGER update_budget_categories_updated_at
 BEFORE UPDATE ON public.budget_categories
 FOR EACH ROW
 EXECUTE FUNCTION update_updated_at_column();
 
+DROP TRIGGER IF EXISTS update_expenses_updated_at ON public.expenses;
 CREATE TRIGGER update_expenses_updated_at
 BEFORE UPDATE ON public.expenses
 FOR EACH ROW

@@ -115,6 +115,9 @@ export function AddResourceDialog({ open, onOpenChange, resourceType, onResource
 
       const description = descriptionParts.length > 0 ? descriptionParts.join(' | ') : undefined
 
+      // Parse quantity (default to 0 if not provided)
+      const quantity = formData.quantity ? parseFloat(formData.quantity) : 0
+
       // Create resource in database
       await resourcesCatalogService.createResource({
         name: formData.name.trim(),
@@ -122,9 +125,14 @@ export function AddResourceDialog({ open, onOpenChange, resourceType, onResource
         unit: unit,
         base_cost: baseCost,
         description: description,
-      })
+        quantity: quantity || 0, // Include quantity in resource creation (default to 0)
+      } as any) // Type assertion needed as quantity is optional in interface
 
       toast.success(`${resourceType.charAt(0).toUpperCase() + resourceType.slice(1)} resource added successfully!`)
+
+      // Dispatch event to refresh charts
+      window.dispatchEvent(new Event('resource-updated'))
+      localStorage.setItem('resource-updated-timestamp', Date.now().toString())
 
       // Reset form
       setFormData({

@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/contexts/AuthContext";
 import { projectsService, teamMembersService, certificationsService, documentsService, Project, TeamMember, Certification, Document } from "@/lib/data-service";
 import { toast } from "sonner";
+import { getAvatarInitials } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import { NewProjectDialog } from "@/components/dashboard/new-project-dialog";
 import { AddTeamMemberDialog } from "@/components/profile/add-team-member-dialog";
@@ -126,6 +127,67 @@ export default function ProfilePage() {
       toast.error('Failed to update profile');
     }
   };
+
+  // Handle avatar upload
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file')
+      return
+    }
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Image size must be less than 5MB')
+      return
+    }
+
+    try {
+      const { supabase } = await import('@/lib/supabase')
+      
+      // Create a unique filename
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${user?.id}-${Date.now()}.${fileExt}`
+      const filePath = `avatars/${fileName}`
+
+      // Upload to Supabase Storage
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: true
+        })
+
+      if (uploadError) {
+        // If bucket doesn't exist, try to use data URL as fallback
+        console.warn('Storage upload failed, using data URL:', uploadError)
+        const reader = new FileReader()
+        reader.onloadend = async () => {
+          const base64String = reader.result as string
+          await updateUserProfile({ avatar_url: base64String })
+          toast.success('Profile picture updated successfully!')
+        }
+        reader.readAsDataURL(file)
+        return
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath)
+
+      // Update user profile with avatar URL
+      await updateUserProfile({ avatar_url: publicUrl })
+      
+      toast.success('Profile picture updated successfully!')
+    } catch (error: any) {
+      console.error('Error uploading avatar:', error)
+      toast.error('Failed to upload profile picture. Please try again.')
+    }
+  }
 
   const handleProfileCancel = () => {
     if (userProfile) {
@@ -266,17 +328,45 @@ export default function ProfilePage() {
           <Card>
             <CardContent className="pt-6">
               <div className="flex flex-col md:flex-row gap-6 items-center">
-                <div className="relative">
-                  <Avatar className="h-24 w-24">
-                    <AvatarImage src={userProfile?.avatar_url || "/company-logo.png"} alt={userProfile?.company_name || "Company"} />
-                    <AvatarFallback>
-                      {userProfile?.company_name?.charAt(0) || userProfile?.full_name?.charAt(0) || "C"}
+                <div className="relative group">
+                  <Avatar className="h-24 w-24 border-4 border-background shadow-lg ring-2 ring-primary/20">
+                    <AvatarImage 
+                      src={userProfile?.avatar_url || undefined} 
+                      alt={userProfile?.company_name || userProfile?.full_name || "Company"} 
+                    />
+                    <AvatarFallback className="bg-gradient-to-br from-blue-600 to-blue-800 text-white text-2xl font-bold">
+                      {getAvatarInitials(
+                        userProfile?.company_name,
+                        userProfile?.full_name,
+                        user?.email
+                      )}
                     </AvatarFallback>
                   </Avatar>
                   {isEditing && (
-                    <Button size="icon" className="absolute bottom-0 right-0 rounded-full" variant="secondary">
-                      <Camera className="h-4 w-4" />
-                    </Button>
+                    <label htmlFor="avatar-upload" className="absolute bottom-0 right-0 cursor-pointer">
+                      <Button 
+                        size="icon" 
+                        className="rounded-full bg-primary hover:bg-primary/90 shadow-lg border-2 border-background" 
+                        variant="default"
+                        asChild
+                      >
+                        <span>
+                          <Camera className="h-4 w-4" />
+                        </span>
+                      </Button>
+                      <input
+                        id="avatar-upload"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleAvatarUpload}
+                      />
+                    </label>
+                  )}
+                  {!isEditing && userProfile?.avatar_url && (
+                    <div className="absolute inset-0 bg-black/0 hover:bg-black/10 rounded-full transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                      <Camera className="h-6 w-6 text-white drop-shadow-lg" />
+                    </div>
                   )}
                 </div>
                 <div className="flex-1 space-y-2 text-center md:text-left">

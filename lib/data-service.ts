@@ -144,10 +144,14 @@ export interface Task {
   description?: string
   start_date?: string
   end_date?: string
+  duration_days?: number  // Duration in days
   progress: number
   status: 'todo' | 'ongoing' | 'done' | 'blocked'
   priority: 'low' | 'medium' | 'high'
   assigned_to?: string  // UUID of project_team_members.id (not team_members.id directly)
+  dependencies?: string[]  // Array of task IDs this task depends on
+  phase?: string  // Phase/folder path for organization (e.g., "PHASE 1: PRE-CONSTRUCTION > 1.1 Project Initiation")
+  phase_order?: number  // Order within phase
   created_at?: string
   updated_at?: string
 }
@@ -160,6 +164,7 @@ export interface Resource {
   type: 'material' | 'labour' | 'equipment'
   unit: string  // kg, hr, item, etc.
   base_cost: number
+  quantity?: number  // Base quantity available in catalog
   description?: string
   created_at?: string
   updated_at?: string
@@ -475,10 +480,27 @@ export const tasksService = {
     
     // Map 'name' to 'title' for interface compatibility
     // Database may use 'name', but Task interface uses 'title'
-    const tasks = (data || []).map((task: any) => ({
-      ...task,
-      title: task.title || task.name, // Support both 'name' and 'title'
-    }))
+    // Parse dependencies from JSONB if it exists
+    const tasks = (data || []).map((task: any) => {
+      let parsedDependencies: string[] = []
+      if (task.dependencies) {
+        try {
+          if (typeof task.dependencies === 'string') {
+            parsedDependencies = JSON.parse(task.dependencies)
+          } else if (Array.isArray(task.dependencies)) {
+            parsedDependencies = task.dependencies
+          }
+        } catch (e) {
+          console.warn('Error parsing task dependencies:', e)
+        }
+      }
+      
+      return {
+        ...task,
+        title: task.title || task.name, // Support both 'name' and 'title'
+        dependencies: parsedDependencies,
+      }
+    })
     
     // Load project_team_members details for assigned tasks
     // assigned_to now references project_team_members.id
@@ -570,11 +592,15 @@ export const tasksService = {
     // Map 'title' to database column - handle both schema versions
     // Migration schema uses 'title', base schema uses 'name'
     // Use project_team_members.id for assigned_to instead of team_member_id
-    const { title, assigned_to, ...restTask } = task
+    const { title, assigned_to, phase, phase_order, dependencies, duration_days, ...restTask } = task
     const payload: any = {
       ...restTask,
       title: title, // Use 'title' (migration schema)
       assigned_to: assignedToProjectTeamId, // Use project_team_members.id
+      phase: phase || null,
+      phase_order: phase_order || 0,
+      duration_days: duration_days || null,
+      dependencies: dependencies && dependencies.length > 0 ? dependencies : null, // Store as JSONB array
       user_id: task.user_id || userData.user?.id,
     }
 
@@ -1198,47 +1224,129 @@ export const projectResourcesService = {
 export const constraintsService = {
   // Get all available constraints (master list)
   async getConstraintsMaster() {
-    const { data, error } = await supabase
-      .from('constraints_master')
-      .select('*')
-      .order('name', { ascending: true })
-    
-    if (error) throw error
-    return data || []
+    try {
+      const { data, error } = await supabase
+        .from('constraints_master')
+        .select('*')
+        .order('name', { ascending: true })
+      
+      if (error) {
+        // If table doesn't exist, return default constraints
+        if (error.code === 'PGRST116' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
+          console.warn('constraints_master table not found, returning default constraints')
+          return getDefaultConstraints()
+        }
+        throw error
+      }
+      return data || []
+    } catch (error: any) {
+      // Fallback to default constraints if table doesn't exist
+      if (error.code === 'PGRST116' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
+        console.warn('constraints_master table not found, returning default constraints')
+        return getDefaultConstraints()
+      }
+      throw error
+    }
   },
 
   // Get constraints assigned to a project
   async getProjectConstraints(projectId: string) {
-    const { data, error } = await supabase
-      .from('project_constraints')
-      .select(`
-        *,
-        constraint:constraints_master(*)
-      `)
-      .eq('project_id', projectId)
-      .order('created_at', { ascending: false })
-    
-    if (error) throw error
-    return data || []
+    try {
+      // Try with join first
+      const { data, error } = await supabase
+        .from('project_constraints')
+        .select(`
+          *,
+          constraint:constraints_master(*)
+        `)
+        .eq('project_id', projectId)
+        .order('created_at', { ascending: false })
+      
+      if (error) {
+        // If join fails, try without join
+        if (error.code === 'PGRST116' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
+          console.warn('constraints_master table not found, fetching project_constraints without join')
+          const { data: simpleData, error: simpleError } = await supabase
+            .from('project_constraints')
+            .select('*')
+            .eq('project_id', projectId)
+            .order('created_at', { ascending: false })
+          
+          if (simpleError) throw simpleError
+          return simpleData || []
+        }
+        throw error
+      }
+      return data || []
+    } catch (error: any) {
+      // Fallback: fetch without join
+      if (error.code === 'PGRST116' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
+        const { data, error: simpleError } = await supabase
+          .from('project_constraints')
+          .select('*')
+          .eq('project_id', projectId)
+          .order('created_at', { ascending: false })
+        
+        if (simpleError) throw simpleError
+        return data || []
+      }
+      throw error
+    }
   },
 
   // Assign constraint to project
   async assignConstraintToProject(projectId: string, constraintId: string, details?: string) {
-    const { data, error } = await supabase
-      .from('project_constraints')
-      .insert([{
-        project_id: projectId,
-        constraint_id: constraintId,
-        details
-      }])
-      .select(`
-        *,
-        constraint:constraints_master(*)
-      `)
-      .single()
-    
-    if (error) throw error
-    return data
+    try {
+      const { data, error } = await supabase
+        .from('project_constraints')
+        .insert([{
+          project_id: projectId,
+          constraint_id: constraintId,
+          details
+        }])
+        .select(`
+          *,
+          constraint:constraints_master(*)
+        `)
+        .single()
+      
+      if (error) {
+        // If join fails, try without join
+        if (error.code === 'PGRST116' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
+          const { data: simpleData, error: simpleError } = await supabase
+            .from('project_constraints')
+            .insert([{
+              project_id: projectId,
+              constraint_id: constraintId,
+              details
+            }])
+            .select('*')
+            .single()
+          
+          if (simpleError) throw simpleError
+          return simpleData
+        }
+        throw error
+      }
+      return data
+    } catch (error: any) {
+      // Fallback: insert without join
+      if (error.code === 'PGRST116' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
+        const { data, error: simpleError } = await supabase
+          .from('project_constraints')
+          .insert([{
+            project_id: projectId,
+            constraint_id: constraintId,
+            details
+          }])
+          .select('*')
+          .single()
+        
+        if (simpleError) throw simpleError
+        return data
+      }
+      throw error
+    }
   },
 
   // Remove constraint from project
@@ -1254,20 +1362,68 @@ export const constraintsService = {
 
   // Update constraint details
   async updateProjectConstraint(projectId: string, constraintId: string, details: string) {
-    const { data, error } = await supabase
-      .from('project_constraints')
-      .update({ details })
-      .eq('project_id', projectId)
-      .eq('constraint_id', constraintId)
-      .select(`
-        *,
-        constraint:constraints_master(*)
-      `)
-      .single()
-    
-    if (error) throw error
-    return data
+    try {
+      const { data, error } = await supabase
+        .from('project_constraints')
+        .update({ details })
+        .eq('project_id', projectId)
+        .eq('constraint_id', constraintId)
+        .select(`
+          *,
+          constraint:constraints_master(*)
+        `)
+        .single()
+      
+      if (error) {
+        // If join fails, try without join
+        if (error.code === 'PGRST116' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
+          const { data: simpleData, error: simpleError } = await supabase
+            .from('project_constraints')
+            .update({ details })
+            .eq('project_id', projectId)
+            .eq('constraint_id', constraintId)
+            .select('*')
+            .single()
+          
+          if (simpleError) throw simpleError
+          return simpleData
+        }
+        throw error
+      }
+      return data
+    } catch (error: any) {
+      // Fallback: update without join
+      if (error.code === 'PGRST116' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
+        const { data, error: simpleError } = await supabase
+          .from('project_constraints')
+          .update({ details })
+          .eq('project_id', projectId)
+          .eq('constraint_id', constraintId)
+          .select('*')
+          .single()
+        
+        if (simpleError) throw simpleError
+        return data
+      }
+      throw error
+    }
   }
+}
+
+// Default constraints if constraints_master table doesn't exist
+function getDefaultConstraints(): ConstraintMaster[] {
+  return [
+    { id: 'default-1', name: 'Budget Limit', description: 'Maximum budget constraint for the project', category: 'budget' },
+    { id: 'default-2', name: 'Time Constraint', description: 'Strict deadline or timeline restrictions', category: 'time' },
+    { id: 'default-3', name: 'Environmental Restrictions', description: 'Environmental compliance and sustainability requirements', category: 'environmental' },
+    { id: 'default-4', name: 'Safety Requirements', description: 'Safety standards and regulations compliance', category: 'safety' },
+    { id: 'default-5', name: 'Accessibility Compliance', description: 'ADA and accessibility standards compliance', category: 'legal' },
+    { id: 'default-6', name: 'Zoning Restrictions', description: 'Local zoning laws and building code restrictions', category: 'legal' },
+    { id: 'default-7', name: 'Material Availability', description: 'Constraints related to material sourcing and availability', category: 'logistics' },
+    { id: 'default-8', name: 'Weather Constraints', description: 'Seasonal or weather-related limitations', category: 'environmental' },
+    { id: 'default-9', name: 'Labor Availability', description: 'Workforce availability and skill requirements', category: 'logistics' },
+    { id: 'default-10', name: 'Equipment Constraints', description: 'Equipment availability and maintenance requirements', category: 'logistics' },
+  ]
 }
 
 // Budget Categories Service

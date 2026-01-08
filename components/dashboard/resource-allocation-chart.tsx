@@ -6,6 +6,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from "recharts"
 import { resourcesCatalogService } from "@/lib/data-service"
 import { TrendingUp, Package, Users, Wrench } from "lucide-react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
 
 // Enhanced color palette with gradients
 // Modern, vibrant colors for better visual appeal
@@ -119,6 +121,17 @@ export function ResourceAllocationChart() {
         setIsLoading(true)
         // Get all resources from the catalog
         const resources = await resourcesCatalogService.getResources()
+        
+        // Listen for resource updates
+        const handleResourceUpdate = () => {
+          load()
+        }
+        
+        window.addEventListener('resource-updated', handleResourceUpdate)
+        
+        return () => {
+          window.removeEventListener('resource-updated', handleResourceUpdate)
+        }
 
         if (resources && resources.length > 0) {
           // Use all resources, including those with quantity 0
@@ -225,6 +238,19 @@ export function ResourceAllocationChart() {
       }
     }
     load()
+    
+    // Also listen for storage events (cross-tab updates)
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'resource-updated-timestamp') {
+        load()
+      }
+    }
+    
+    window.addEventListener('storage', handleStorageChange)
+    
+    return () => {
+      window.removeEventListener('storage', handleStorageChange)
+    }
   }, [])
 
   return (
@@ -297,13 +323,65 @@ export function ResourceAllocationChart() {
           </div>
         ) : !hasData ? (
           <div className="h-[350px] w-full flex items-center justify-center">
-            <div className="flex flex-col items-center gap-3 text-center">
-              <Package className="h-12 w-12 text-muted-foreground/50" />
+            <div className="flex flex-col items-center gap-4 text-center p-6 max-w-md">
+              <Package className="h-16 w-16 text-muted-foreground/50" />
               <div>
-                <p className="text-lg font-semibold text-foreground">No Resource Data Available</p>
-                <p className="text-sm text-muted-foreground mt-1">
+                <p className="text-lg font-semibold text-foreground mb-2">No Resource Data Available</p>
+                <p className="text-sm text-muted-foreground mb-4">
                   Add resources to your catalog to see allocation charts
                 </p>
+                <div className="flex flex-col gap-3 text-xs text-left bg-muted/50 p-4 rounded-lg border">
+                  <p className="font-semibold mb-1">To display resource data:</p>
+                  <ol className="list-decimal list-inside space-y-1.5 text-muted-foreground mb-3">
+                    <li>Go to <span className="font-medium text-foreground">Resources</span> page</li>
+                    <li>Click <span className="font-medium text-foreground">"Add Resource"</span> button</li>
+                    <li>Fill in resource details:
+                      <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
+                        <li>Name (e.g., "Bricks", "Cement")</li>
+                        <li>Type (Material, Equipment, or Labor)</li>
+                        <li><span className="font-semibold text-foreground">Quantity</span> - This is required for charts!</li>
+                        <li>Unit (e.g., "kg", "pieces", "hours")</li>
+                        <li>Base Cost (optional)</li>
+                      </ul>
+                    </li>
+                    <li>Save the resource</li>
+                  </ol>
+                  <Link href="/dashboard/resources">
+                    <Button size="sm" className="w-full">
+                      Go to Resources Page
+                    </Button>
+                  </Link>
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : barData.length > 0 && barData.every(d => d.quantity === 0) ? (
+          <div className="h-[350px] w-full flex items-center justify-center">
+            <div className="flex flex-col items-center gap-4 text-center p-6 max-w-md">
+              <Package className="h-16 w-16 text-muted-foreground/50" />
+              <div>
+                <p className="text-lg font-semibold text-foreground mb-2">Resources Found but No Quantities Set</p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  You have <span className="font-semibold text-foreground">{stats.totalResources} resources</span>, but none have quantities assigned.
+                </p>
+                <div className="flex flex-col gap-3 text-xs text-left bg-muted/50 p-4 rounded-lg border">
+                  <p className="font-semibold mb-1">To display resource data in charts:</p>
+                  <ol className="list-decimal list-inside space-y-1.5 text-muted-foreground mb-3">
+                    <li>Go to <span className="font-medium text-foreground">Resources</span> page</li>
+                    <li>Click on any resource to edit it</li>
+                    <li>Set the <span className="font-semibold text-foreground">Quantity</span> field (e.g., 100, 500, 1000)</li>
+                    <li>Save the changes</li>
+                    <li>Refresh this page to see updated charts</li>
+                  </ol>
+                  <p className="text-xs text-muted-foreground italic">
+                    💡 Tip: You can also assign resources to projects with quantities, which will be reflected here.
+                  </p>
+                  <Link href="/dashboard/resources">
+                    <Button size="sm" className="w-full">
+                      Go to Resources Page
+                    </Button>
+                  </Link>
+                </div>
               </div>
             </div>
           </div>

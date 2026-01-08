@@ -67,7 +67,12 @@ export class OptimizationEngine {
   async optimizeTaskScheduling(
     tasks: Task[],
     resources: Resource[],
-    constraints: Record<string, any> = {}
+    constraints: Record<string, any> = {},
+    additionalData?: {
+      expenses?: any[]
+      budgetCategories?: any[]
+      projectBudget?: number
+    }
   ): Promise<OptimizationResult> {
     console.log('Starting Genetic Algorithm for task scheduling...')
     
@@ -77,7 +82,7 @@ export class OptimizationEngine {
     // Evolution loop
     for (let generation = 0; generation < this.config.generations; generation++) {
       // Evaluate fitness
-      population = await this.evaluateScheduleFitness(population, tasks, resources, constraints)
+      population = await this.evaluateScheduleFitness(population, tasks, resources, constraints, additionalData)
       
       // Sort by fitness (higher is better)
       population.sort((a, b) => b.fitness - a.fitness)
@@ -126,8 +131,8 @@ export class OptimizationEngine {
       results: {
         optimalSchedule: bestSolution,
         makespan: this.calculateMakespan(bestSolution, tasks),
-        resourceUtilization: this.calculateResourceUtilization(bestSolution, resources),
-        totalCost: this.calculateTotalCost(bestSolution, tasks, resources)
+        resourceUtilization: this.calculateResourceUtilization(bestSolution, resources, tasks, additionalData),
+        totalCost: this.calculateTotalCost(bestSolution, tasks, resources, additionalData)
       },
       performance_metrics: {
         generations: this.config.generations,
@@ -141,7 +146,12 @@ export class OptimizationEngine {
   async optimizeResourceLeveling(
     tasks: Task[],
     resources: Resource[],
-    levelingObjective: 'minimize_peaks' | 'minimize_variance' | 'balance_workload' = 'minimize_peaks'
+    levelingObjective: 'minimize_peaks' | 'minimize_variance' | 'balance_workload' = 'minimize_peaks',
+    additionalData?: {
+      expenses?: any[]
+      budgetCategories?: any[]
+      projectBudget?: number
+    }
   ): Promise<OptimizationResult> {
     console.log('Starting Genetic Algorithm for resource leveling...')
     
@@ -313,10 +323,15 @@ export class OptimizationEngine {
     population: ScheduleChromosome[],
     tasks: Task[],
     resources: Resource[],
-    constraints: Record<string, any>
+    constraints: Record<string, any>,
+    additionalData?: {
+      expenses?: any[]
+      budgetCategories?: any[]
+      projectBudget?: number
+    }
   ): Promise<ScheduleChromosome[]> {
     return population.map(chromosome => {
-      const fitness = this.calculateScheduleFitness(chromosome, tasks, resources, constraints)
+      const fitness = this.calculateScheduleFitness(chromosome, tasks, resources, constraints, additionalData)
       return { ...chromosome, fitness }
     })
   }
@@ -337,23 +352,37 @@ export class OptimizationEngine {
     chromosome: ScheduleChromosome,
     tasks: Task[],
     resources: Resource[],
-    constraints: Record<string, any>
+    constraints: Record<string, any>,
+    additionalData?: {
+      expenses?: any[]
+      budgetCategories?: any[]
+      projectBudget?: number
+    }
   ): number {
     // Multi-objective fitness function
     const makespan = this.calculateMakespan(chromosome, tasks)
-    const cost = this.calculateTotalCost(chromosome, tasks, resources)
-    const resourceUtilization = this.calculateResourceUtilization(chromosome, resources)
+    const cost = this.calculateTotalCost(chromosome, tasks, resources, additionalData)
+    const resourceUtilization = this.calculateResourceUtilization(chromosome, resources, tasks, additionalData)
     const constraintViolations = this.calculateConstraintViolations(chromosome, tasks, constraints)
     
+    // Normalize makespan (assume max 365 days)
+    const normalizedMakespan = Math.min(makespan / 365, 1)
+    
+    // Normalize cost (use project budget if available, otherwise use cost itself)
+    const budget = additionalData?.projectBudget || cost || 1
+    const normalizedCost = Math.min(cost / budget, 1)
+    
     // Weighted fitness (higher is better)
+    // Invert makespan and cost (lower is better), keep utilization (higher is better)
     const fitness = (
-      (1 / (makespan + 1)) * 0.4 +
-      (1 / (cost + 1)) * 0.3 +
+      (1 - normalizedMakespan) * 0.4 +
+      (1 - normalizedCost) * 0.3 +
       resourceUtilization * 0.2 +
       (1 / (constraintViolations + 1)) * 0.1
     )
     
-    return fitness
+    // Ensure fitness is between 0 and 1
+    return Math.max(0, Math.min(1, fitness))
   }
 
   private calculateResourceFitness(
@@ -494,14 +523,79 @@ export class OptimizationEngine {
            Math.max(...tasks.map(t => t.duration_days || 0))
   }
 
-  private calculateTotalCost(chromosome: ScheduleChromosome, tasks: Task[], resources: Resource[]): number {
-    // Simplified cost calculation
-    return tasks.reduce((total, task) => total + (task.estimated_cost || 0), 0)
+  private calculateTotalCost(
+    chromosome: ScheduleChromosome, 
+    tasks: Task[], 
+    resources: Resource[],
+    additionalData?: {
+      expenses?: any[]
+      budgetCategories?: any[]
+      projectBudget?: number
+    }
+  ): number {
+    // Calculate task costs
+    let totalCost = tasks.reduce((total, task) => {
+      const taskCost = Number(task.estimated_cost) || 0
+      return total + taskCost
+    }, 0)
+
+    // Add actual expenses from database
+    if (additionalData?.expenses && additionalData.expenses.length > 0) {
+      const expenseTotal = additionalData.expenses.reduce((sum, exp) => {
+        return sum + (Number(exp.amount) || 0)
+      }, 0)
+      totalCost += expenseTotal
+    }
+
+    // Add resource costs
+    resources.forEach(resource => {
+      const quantity = (resource as any).quantity || 1
+      const unitCost = Number(resource.base_cost) || Number((resource as any).cost) || 0
+      totalCost += quantity * unitCost
+    })
+
+    // If we have budget categories, use planned amounts
+    if (additionalData?.budgetCategories && additionalData.budgetCategories.length > 0) {
+      const categoryTotal = additionalData.budgetCategories.reduce((sum, cat) => {
+        return sum + (Number(cat.planned_amount) || 0)
+      }, 0)
+      // Use the higher of task costs or category planned amounts
+      totalCost = Math.max(totalCost, categoryTotal)
+    }
+
+    return totalCost
   }
 
-  private calculateResourceUtilization(chromosome: ScheduleChromosome, resources: Resource[]): number {
-    // Simplified utilization calculation
-    return 0.75 // Placeholder
+  private calculateResourceUtilization(
+    chromosome: ScheduleChromosome, 
+    resources: Resource[],
+    tasks: Task[],
+    additionalData?: {
+      expenses?: any[]
+      budgetCategories?: any[]
+      projectBudget?: number
+    }
+  ): number {
+    if (!resources || resources.length === 0) return 0
+
+    // Calculate actual resource utilization based on assigned resources
+    let totalAllocated = 0
+    let totalAvailable = 0
+
+    resources.forEach(resource => {
+      const quantity = (resource as any).quantity || 0
+      const available = Number(resource.quantity) || Number((resource as any).available_quantity) || quantity
+      
+      totalAllocated += quantity
+      totalAvailable += available
+    })
+
+    // Calculate utilization percentage
+    if (totalAvailable === 0) return 0
+    const utilization = totalAllocated / totalAvailable
+
+    // Normalize to 0-1 range and ensure it's realistic
+    return Math.min(Math.max(utilization, 0), 1)
   }
 
   private calculateConstraintViolations(chromosome: ScheduleChromosome, tasks: Task[], constraints: Record<string, any>): number {
@@ -510,8 +604,33 @@ export class OptimizationEngine {
   }
 
   private calculateResourceProfile(chromosome: ResourceChromosome, resources: Resource[]): number[] {
-    // Simplified resource profile calculation
-    return [10, 15, 12, 18, 14, 16, 13] // Placeholder
+    if (!resources || resources.length === 0) return [0, 0, 0, 0, 0, 0, 0]
+
+    // Calculate actual resource profile based on assigned resources
+    const profile: number[] = []
+    
+    // Generate 7-day profile (one week)
+    for (let day = 0; day < 7; day++) {
+      let dayTotal = 0
+      
+      resources.forEach(resource => {
+        const quantity = (resource as any).quantity || 0
+        // Distribute resources across days (simplified)
+        const dailyAllocation = quantity / 7
+        dayTotal += dailyAllocation
+      })
+      
+      profile.push(Math.round(dayTotal))
+    }
+
+    // If all zeros, return a default profile based on total resources
+    if (profile.every(v => v === 0)) {
+      const totalResources = resources.reduce((sum, r) => sum + ((r as any).quantity || 0), 0)
+      const avgDaily = Math.round(totalResources / 7)
+      return Array(7).fill(avgDaily)
+    }
+
+    return profile
   }
 
   private calculateLevelingMetrics(chromosome: ResourceChromosome, resources: Resource[]): Record<string, number> {

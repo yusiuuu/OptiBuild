@@ -21,6 +21,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { format } from "date-fns"
 import { tasksService, projectsService, projectTeamMembersService, type Project, type TeamMember } from "@/lib/data-service"
 import { toast } from "sonner"
+import { PhaseFolderSelector } from "@/components/tasks/phase-folder-selector"
+import { DependenciesSelector } from "@/components/tasks/dependencies-selector"
 
 interface NewTaskDialogProps {
   open: boolean
@@ -40,10 +42,15 @@ export function NewTaskDialog({ open, onOpenChange, projectId, onTaskCreated }: 
   const [startDate, setStartDate] = useState<Date | undefined>(undefined)
   const [endDate, setEndDate] = useState<Date | undefined>(undefined)
   const [progress, setProgress] = useState(0)
+  const [phase, setPhase] = useState<string>("")
+  const [phaseOrder, setPhaseOrder] = useState<number>(0)
+  const [durationDays, setDurationDays] = useState<number | undefined>(undefined)
+  const [dependencies, setDependencies] = useState<string[]>([])
 
   // Project and team data
   const [project, setProject] = useState<Project | null>(null)
   const [teamMembers, setTeamMembers] = useState<Array<{ id: string; name: string }>>([])
+  const [existingTasks, setExistingTasks] = useState<Array<{ id: string; title: string }>>([])
 
   // Load project and team members
   useEffect(() => {
@@ -62,17 +69,32 @@ export function NewTaskDialog({ open, onOpenChange, projectId, onTaskCreated }: 
             // Use project_team_members.id for assignment (not team_member.id)
             setTeamMembers(
               projectTeam
-                .filter(ptm => ptm.team_member !== null && ptm.team_member !== undefined)
+                .filter(ptm => ptm.team_member !== null && ptm.team_member !== undefined && ptm.id)
                 .map(ptm => ({ 
-                  id: ptm.id || '', // Use project_team_members.id
+                  id: ptm.id || 'unassigned', // Use project_team_members.id, fallback to 'unassigned' if empty
                   name: ptm.team_member?.name || 'Unknown',
                   team_member_id: ptm.team_member_id // Keep for reference
                 }))
+                .filter(member => member.id && member.id !== 'unassigned') // Filter out any invalid IDs
             )
           } catch (teamError: any) {
             // If team members can't be loaded, just set empty array
             console.warn('Could not load team members:', teamError)
             setTeamMembers([])
+          }
+
+          // Load existing tasks for dependencies
+          try {
+            const projectTasks = await tasksService.getTasks(projectId)
+            setExistingTasks(
+              projectTasks.map(task => ({
+                id: task.id || '',
+                title: task.title || 'Untitled Task'
+              })).filter(task => task.id) // Filter out tasks without IDs
+            )
+          } catch (tasksError: any) {
+            console.warn('Could not load existing tasks:', tasksError)
+            setExistingTasks([])
           }
         } catch (error: any) {
           // Extract all possible error properties (including non-enumerable)
@@ -152,6 +174,10 @@ export function NewTaskDialog({ open, onOpenChange, projectId, onTaskCreated }: 
     setStartDate(undefined)
     setEndDate(undefined)
     setProgress(0)
+    setPhase("")
+    setPhaseOrder(0)
+    setDurationDays(undefined)
+    setDependencies([])
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -192,17 +218,28 @@ export function NewTaskDialog({ open, onOpenChange, projectId, onTaskCreated }: 
     setIsSubmitting(true)
 
     try {
+      // Calculate end_date from start_date + duration if duration is provided and end_date is not set
+      let finalEndDate = endDate
+      if (startDate && durationDays && durationDays > 0 && !endDate) {
+        finalEndDate = new Date(startDate)
+        finalEndDate.setDate(finalEndDate.getDate() + durationDays)
+      }
+
       await tasksService.createTask({
         project_id: projectId,
         title: title.trim(),
         description: description.trim() || undefined,
         priority,
         status,
-        assigned_to: assignedTo || undefined,
+        assigned_to: (assignedTo && assignedTo !== "unassigned") ? assignedTo : undefined,
         start_date: startDate?.toISOString().split('T')[0],
-        end_date: endDate?.toISOString().split('T')[0],
-        progress
-      })
+        end_date: finalEndDate?.toISOString().split('T')[0],
+        duration_days: durationDays || undefined,
+        progress,
+        phase: phase || undefined,
+        phase_order: phaseOrder || 0,
+        dependencies: dependencies.length > 0 ? dependencies : undefined
+      } as any)
 
       toast.success("Task created successfully!")
       resetForm()
@@ -390,12 +427,15 @@ export function NewTaskDialog({ open, onOpenChange, projectId, onTaskCreated }: 
                   <span>Loading team members...</span>
                 </div>
               ) : teamMembers.length > 0 ? (
-                <Select value={assignedTo} onValueChange={setAssignedTo}>
+                <Select 
+                  value={assignedTo || undefined} 
+                  onValueChange={(value) => setAssignedTo(value === "unassigned" ? "" : value)}
+                >
                   <SelectTrigger id="assigned-to">
                     <SelectValue placeholder="Select team member (optional)" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">None (Unassigned)</SelectItem>
+                    <SelectItem value="unassigned">None (Unassigned)</SelectItem>
                     {teamMembers.map((member) => (
                       <SelectItem key={member.id} value={member.id}>
                         {member.name}
@@ -463,18 +503,58 @@ export function NewTaskDialog({ open, onOpenChange, projectId, onTaskCreated }: 
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="progress">Progress: {progress}%</Label>
-              <Input
-                id="progress"
-                type="range"
-                min="0"
-                max="100"
-                value={progress}
-                onChange={(e) => setProgress(parseInt(e.target.value))}
-                className="w-full"
-              />
+            <PhaseFolderSelector
+              value={phase}
+              onChange={setPhase}
+              phaseOrder={phaseOrder}
+              onPhaseOrderChange={setPhaseOrder}
+            />
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="duration">Duration (Days)</Label>
+                <Input
+                  id="duration"
+                  type="number"
+                  min="1"
+                  value={durationDays || ""}
+                  onChange={(e) => {
+                    const val = e.target.value === "" ? undefined : parseInt(e.target.value)
+                    setDurationDays(val)
+                    // Auto-calculate end date if start date is set
+                    if (val && val > 0 && startDate) {
+                      const calculatedEnd = new Date(startDate)
+                      calculatedEnd.setDate(calculatedEnd.getDate() + val)
+                      setEndDate(calculatedEnd)
+                    }
+                  }}
+                  placeholder="e.g., 5"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Duration in days (will auto-calculate end date if start date is set)
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="progress">Progress: {progress}%</Label>
+                <Input
+                  id="progress"
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={progress}
+                  onChange={(e) => setProgress(parseInt(e.target.value))}
+                  className="w-full"
+                />
+              </div>
             </div>
+
+            <DependenciesSelector
+              dependencies={dependencies}
+              onChange={setDependencies}
+              availableTasks={existingTasks}
+              disabled={isLoading}
+            />
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>

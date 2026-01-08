@@ -65,6 +65,8 @@ import { useAuth } from "@/contexts/AuthContext"
 import { toast } from "sonner"
 import { format } from "date-fns"
 import { AIChatbot } from "@/components/dashboard/ai-chatbot"
+import { getAvatarInitials } from "@/lib/utils"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 
 // Main dashboard page component for OptiBuild application
 // Provides comprehensive overview of construction projects, resources, and analytics
@@ -73,8 +75,15 @@ export default function DashboardPage() {
   const { theme, setTheme } = useTheme()
   // Router hook for navigation
   const router = useRouter()
-  // Authentication context function for user logout
-  const { signOut } = useAuth()
+  // Authentication context function for user logout and profile
+  const { signOut, userProfile, user } = useAuth()
+  
+  const avatarInitials = getAvatarInitials(
+    userProfile?.company_name,
+    userProfile?.full_name,
+    user?.email
+  )
+  const avatarUrl = userProfile?.avatar_url
   
   // Project list (fetched from Supabase only)
   const [projects, setProjects] = useState<any[]>([]);
@@ -243,7 +252,11 @@ export default function DashboardPage() {
   
   // Dashboard filtering and date range state
   const [activeFilter, setActiveFilter] = useState("all")
-  const [dateRange, setDateRange] = useState("Apr 2025")
+  // Initialize with current month as default
+  const [dateRange, setDateRange] = useState(() => {
+    const now = new Date()
+    return format(now, "MMM yyyy") // e.g., "Dec 2024"
+  })
   
   // Notification badge count
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0)
@@ -494,21 +507,33 @@ export default function DashboardPage() {
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="ghost" size="icon" className="relative h-10 w-10">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-gradient-to-r from-blue-600 to-blue-800 text-white shadow-sm">
-                      <span className="font-semibold text-lg">CB</span>
-                    </div>
+                    <Avatar className="h-10 w-10 border-2 border-background shadow-md">
+                      <AvatarImage 
+                        src={avatarUrl || undefined} 
+                        alt={userProfile?.company_name || userProfile?.full_name || 'User'} 
+                      />
+                      <AvatarFallback className="bg-gradient-to-r from-blue-600 to-blue-800 text-white font-semibold text-sm">
+                        {avatarInitials}
+                      </AvatarFallback>
+                    </Avatar>
                     <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background bg-green-500" />
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-56">
                   {/* User info section */}
                   <div className="flex items-center justify-start gap-2 p-2">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border bg-gradient-to-r from-blue-600 to-blue-800 text-white">
-                      <span className="font-semibold text-lg">CB</span>
-                    </div>
+                    <Avatar className="h-10 w-10 border-2 border-background">
+                      <AvatarImage 
+                        src={avatarUrl || undefined} 
+                        alt={userProfile?.company_name || userProfile?.full_name || 'User'} 
+                      />
+                      <AvatarFallback className="bg-gradient-to-r from-blue-600 to-blue-800 text-white font-semibold text-xs">
+                        {avatarInitials}
+                      </AvatarFallback>
+                    </Avatar>
                     <div className="flex flex-col space-y-1">
-                      <p className="text-sm font-medium leading-none">OptiBuild</p>
-                      <p className="text-xs leading-none text-muted-foreground">admin@optibuild.com</p>
+                      <p className="text-sm font-medium leading-none">{userProfile?.company_name || userProfile?.full_name || 'OptiBuild'}</p>
+                      <p className="text-xs leading-none text-muted-foreground">{user?.email || 'admin@optibuild.com'}</p>
                     </div>
                   </div>
                   <DropdownMenuSeparator />
@@ -537,8 +562,8 @@ export default function DashboardPage() {
           </header>
 
           {/* Main Dashboard Content */}
-          <main className="flex-1 overflow-y-auto overflow-x-hidden w-full min-h-0">
-            <div className="grid gap-2 sm:gap-3 md:gap-4 p-2 sm:p-3 md:p-4 lg:p-6 max-w-full pb-8">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden w-full min-h-0 bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-950 dark:via-gray-900 dark:to-gray-950">
+            <div className="grid gap-4 sm:gap-5 md:gap-6 p-4 sm:p-5 md:p-6 lg:p-8 max-w-full pb-12">
               {/* Dashboard header with filters and date range */}
               <DashboardHeader
                 activeFilter={activeFilter}
@@ -548,16 +573,23 @@ export default function DashboardPage() {
               />
 
               {/* Overview Cards: Key metrics and KPIs */}
-              <div className="grid gap-2 sm:gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="grid gap-4 sm:gap-5 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
               {/* Active Projects card with animation */}
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
-                <Card className="h-full flex flex-col">
-                  <CardHeader className="flex flex-row items-center justify-between pb-1.5 px-3 sm:px-4 pt-3 sm:pt-4 flex-shrink-0">
-                    <CardTitle className="text-xs sm:text-sm font-medium truncate pr-2">Active Projects</CardTitle>
-                    <LineChart className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500 flex-shrink-0" />
+              <motion.div 
+                initial={{ opacity: 0, y: 20 }} 
+                animate={{ opacity: 1, y: 0 }} 
+                transition={{ duration: 0.4, ease: "easeOut" }}
+                whileHover={{ y: -4, transition: { duration: 0.2 } }}
+              >
+                <Card className="h-full flex flex-col border-2 shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-950/30 dark:to-blue-900/20 border-blue-200 dark:border-blue-800">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2 px-4 sm:px-5 pt-4 sm:pt-5 flex-shrink-0">
+                    <CardTitle className="text-sm sm:text-base font-semibold truncate pr-2 text-blue-900 dark:text-blue-100">Active Projects</CardTitle>
+                    <div className="h-10 w-10 rounded-lg bg-blue-500/20 dark:bg-blue-500/30 flex items-center justify-center flex-shrink-0">
+                      <LineChart className="h-5 w-5 text-blue-600 dark:text-blue-400" />
+                    </div>
                   </CardHeader>
-                  <CardContent className="px-3 sm:px-4 pb-3 sm:pb-4 flex-1 flex items-end">
-                    <div className="text-xl sm:text-2xl font-bold">{projects.length}</div>
+                  <CardContent className="px-4 sm:px-5 pb-4 sm:pb-5 flex-1 flex items-end">
+                    <div className="text-3xl sm:text-4xl font-bold text-blue-900 dark:text-blue-100">{projects.length}</div>
                   </CardContent>
                 </Card>
               </motion.div>
@@ -566,16 +598,19 @@ export default function DashboardPage() {
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.1 }}
+                transition={{ duration: 0.4, delay: 0.1, ease: "easeOut" }}
+                whileHover={{ y: -4, transition: { duration: 0.2 } }}
               >
-                <Card className="h-full flex flex-col">
-                  <CardHeader className="flex flex-row items-center justify-between pb-1.5 px-3 sm:px-4 pt-3 sm:pt-4 flex-shrink-0">
-                    <CardTitle className="text-xs sm:text-sm font-medium truncate pr-2">Resource Utilization</CardTitle>
-                    <BarChart3 className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500 flex-shrink-0" />
+                <Card className="h-full flex flex-col border-2 shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-green-50 to-green-100/50 dark:from-green-950/30 dark:to-green-900/20 border-green-200 dark:border-green-800">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2 px-4 sm:px-5 pt-4 sm:pt-5 flex-shrink-0">
+                    <CardTitle className="text-sm sm:text-base font-semibold truncate pr-2 text-green-900 dark:text-green-100">Resource Utilization</CardTitle>
+                    <div className="h-10 w-10 rounded-lg bg-green-500/20 dark:bg-green-500/30 flex items-center justify-center flex-shrink-0">
+                      <BarChart3 className="h-5 w-5 text-green-600 dark:text-green-400" />
+                    </div>
                   </CardHeader>
-                  <CardContent className="px-3 sm:px-4 pb-3 sm:pb-4 flex-1 flex flex-col justify-end">
-                    <div className="text-xl sm:text-2xl font-bold">{resourceUtilization}%</div>
-                    <Progress value={resourceUtilization} className="mt-2 h-1.5" />
+                  <CardContent className="px-4 sm:px-5 pb-4 sm:pb-5 flex-1 flex flex-col justify-end space-y-3">
+                    <div className="text-3xl sm:text-4xl font-bold text-green-900 dark:text-green-100">{resourceUtilization}%</div>
+                    <Progress value={resourceUtilization} className="h-2.5 bg-green-100 dark:bg-green-900/50" />
                   </CardContent>
                 </Card>
               </motion.div>
@@ -584,39 +619,42 @@ export default function DashboardPage() {
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: 0.2 }}
+                transition={{ duration: 0.4, delay: 0.2, ease: "easeOut" }}
+                whileHover={{ y: -4, transition: { duration: 0.2 } }}
               >
-                <Card className="h-full flex flex-col">
-                  <CardHeader className="flex flex-row items-center justify-between pb-1.5 px-3 sm:px-4 pt-3 sm:pt-4 flex-shrink-0">
-                    <CardTitle className="text-xs sm:text-sm font-medium truncate pr-2">Delay Reduction</CardTitle>
-                    <Clock className="h-3 w-3 sm:h-4 sm:w-4 text-gray-500 flex-shrink-0" />
+                <Card className="h-full flex flex-col border-2 shadow-lg hover:shadow-xl transition-all duration-300 bg-gradient-to-br from-amber-50 to-amber-100/50 dark:from-amber-950/30 dark:to-amber-900/20 border-amber-200 dark:border-amber-800">
+                  <CardHeader className="flex flex-row items-center justify-between pb-2 px-4 sm:px-5 pt-4 sm:pt-5 flex-shrink-0">
+                    <CardTitle className="text-sm sm:text-base font-semibold truncate pr-2 text-amber-900 dark:text-amber-100">Delay Reduction</CardTitle>
+                    <div className="h-10 w-10 rounded-lg bg-amber-500/20 dark:bg-amber-500/30 flex items-center justify-center flex-shrink-0">
+                      <Clock className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    </div>
                   </CardHeader>
-                  <CardContent className="px-3 sm:px-4 pb-3 sm:pb-4 flex-1 flex flex-col justify-end">
-                    <div className="text-xl sm:text-2xl font-bold">{delayReduction}%</div>
-                    <Progress value={delayReduction} className="mt-2 h-1.5" />
+                  <CardContent className="px-4 sm:px-5 pb-4 sm:pb-5 flex-1 flex flex-col justify-end space-y-3">
+                    <div className="text-3xl sm:text-4xl font-bold text-amber-900 dark:text-amber-100">{delayReduction}%</div>
+                    <Progress value={delayReduction} className="h-2.5 bg-amber-100 dark:bg-amber-900/50" />
                   </CardContent>
                 </Card>
               </motion.div>
             </div>
 
               {/* Main Dashboard Content Grid */}
-              <div className="grid gap-2 sm:gap-3 md:gap-4 grid-cols-1 lg:grid-cols-7">
+              <div className="grid gap-4 sm:gap-5 md:gap-6 grid-cols-1 lg:grid-cols-7">
                 {/* Resource Allocation Chart: Visual representation of resource distribution */}
                 <motion.div
-                  className="col-span-full lg:col-span-4 min-h-[300px] sm:min-h-[350px] lg:min-h-[400px]"
+                  className="col-span-full lg:col-span-4 min-h-[400px] sm:min-h-[450px] lg:min-h-[500px]"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.2 }}
+                  transition={{ duration: 0.5, delay: 0.3, ease: "easeOut" }}
                 >
                   <ResourceAllocationChart />
                 </motion.div>
 
                 {/* Project Status: List of projects with their current status */}
                 <motion.div
-                  className="col-span-full lg:col-span-3 min-h-[300px] sm:min-h-[350px] lg:min-h-[400px]"
+                  className="col-span-full lg:col-span-3 min-h-[400px] sm:min-h-[450px] lg:min-h-[500px]"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.3 }}
+                  transition={{ duration: 0.5, delay: 0.4, ease: "easeOut" }}
                 >
                   <ProjectStatusList />
                 </motion.div>
@@ -626,7 +664,7 @@ export default function DashboardPage() {
                   className="col-span-full"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.4 }}
+                  transition={{ duration: 0.5, delay: 0.5, ease: "easeOut" }}
                 >
                   <ProjectVisualizations key={projectsRefreshKey} />
                 </motion.div>
@@ -636,7 +674,7 @@ export default function DashboardPage() {
                   className="col-span-full"
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.5, delay: 0.5 }}
+                  transition={{ duration: 0.5, delay: 0.6, ease: "easeOut" }}
                 >
                   <ResourceOptimizationTabs />
                 </motion.div>

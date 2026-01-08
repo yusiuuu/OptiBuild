@@ -97,29 +97,31 @@ export function ProjectStatusList() {
   }
 
   return (
-    <Card className="h-full flex flex-col w-full">
+    <Card className="h-full flex flex-col w-full border-2 shadow-lg bg-gradient-to-br from-background to-muted/20">
       {/* Card header with title and description */}
-      <CardHeader className="px-3 sm:px-4 pt-3 sm:pt-4 pb-2 sm:pb-3 flex-shrink-0">
-        <CardTitle className="text-sm sm:text-base">Project Status</CardTitle>
-        <CardDescription className="text-xs hidden sm:block">Current status of active projects</CardDescription>
+      <CardHeader className="px-4 sm:px-5 pt-4 sm:pt-5 pb-3 flex-shrink-0 border-b bg-gradient-to-r from-muted/30 to-transparent">
+        <CardTitle className="text-base sm:text-lg font-bold bg-gradient-to-r from-foreground to-foreground/70 bg-clip-text text-transparent">
+          Project Status
+        </CardTitle>
+        <CardDescription className="text-xs sm:text-sm mt-1">Current status of active projects</CardDescription>
       </CardHeader>
       
       {/* Card content with project list */}
-      <CardContent className="px-3 sm:px-4 pb-3 sm:pb-4 flex-1 min-h-0 overflow-hidden flex flex-col">
+      <CardContent className="px-4 sm:px-5 pb-4 sm:pb-5 flex-1 min-h-0 overflow-hidden flex flex-col">
         {isLoading ? (
-          <div className="text-center py-6 text-gray-500 text-sm">Loading projects...</div>
+          <div className="text-center py-8 text-muted-foreground text-sm">Loading projects...</div>
         ) : projects.length === 0 ? (
-          <div className="text-center py-6 text-gray-500 text-sm">No projects found. Create a new project to get started.</div>
+          <div className="text-center py-8 text-muted-foreground text-sm">No projects found. Create a new project to get started.</div>
         ) : (
-          <div className="space-y-3 flex-1 overflow-y-auto min-h-0">
+          <div className="space-y-4 flex-1 overflow-y-auto min-h-0 py-2">
             {/* Map through all projects and display their status information */}
             {projects.map((project) => (
-              <div key={project.id} className="space-y-1.5 pb-2 border-b last:border-0">
+              <div key={project.id} className="space-y-2.5 p-3 rounded-lg border border-border/50 hover:border-primary/50 hover:shadow-md transition-all duration-200 bg-card/50">
                 {/* Project title and status badge row */}
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <Link 
                     href={`/dashboard/projects/${project.id}`}
-                    className="font-medium text-sm hover:text-blue-600 transition-colors truncate flex-1 mr-2"
+                    className="font-semibold text-sm hover:text-primary transition-colors truncate flex-1"
                   >
                     {project.title}
                   </Link>
@@ -127,20 +129,20 @@ export function ProjectStatusList() {
                 </div>
                 
                 {/* Due date and progress percentage row */}
-                <div className="flex items-center justify-between text-xs text-gray-500">
-                  <div className="flex items-center">
-                    <Clock className="mr-1 h-3 w-3" />
-                    {project.dueDate ? new Date(project.dueDate).toLocaleDateString() : 'No due date'}
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1.5">
+                    <Clock className="h-3.5 w-3.5" />
+                    <span>{project.dueDate ? new Date(project.dueDate).toLocaleDateString() : 'No due date'}</span>
                   </div>
-                  <div className="font-medium">{project.progress}%</div>
+                  <div className="font-semibold text-foreground">{project.progress}%</div>
                 </div>
                 
                 {/* Progress bar showing completion percentage */}
-                <Progress value={project.progress} className="h-1.5" />
+                <Progress value={project.progress} className="h-2" />
                 
                 {/* Budget information and status row */}
-                <div className="flex justify-between items-center">
-                  <div className="text-xs">Budget: {project.budget}</div>
+                <div className="flex justify-between items-center pt-1">
+                  <div className="text-xs font-medium text-foreground">Budget: {project.budget}</div>
                   {getBudgetStatusBadge(project.budgetStatus)}
                 </div>
               </div>
@@ -150,8 +152,8 @@ export function ProjectStatusList() {
       </CardContent>
       
       {/* Card footer with refresh button */}
-      <CardFooter className="px-3 sm:px-4 pb-3 sm:pb-4 pt-2 sm:pt-3 flex-shrink-0">
-        <Button variant="outline" size="sm" className="w-full text-xs sm:text-sm h-8 sm:h-9" onClick={() => window.location.reload()}>
+      <CardFooter className="px-4 sm:px-5 pb-4 sm:pb-5 pt-3 flex-shrink-0 border-t">
+        <Button variant="outline" size="sm" className="w-full text-sm h-9 hover:bg-primary hover:text-primary-foreground transition-colors" onClick={() => window.location.reload()}>
           Refresh Projects
         </Button>
       </CardFooter>

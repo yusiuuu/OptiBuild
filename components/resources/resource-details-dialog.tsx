@@ -21,15 +21,17 @@ import {
   Edit,
   Save,
 } from "lucide-react"
+import { toast } from "sonner"
 
 interface ResourceDetailsDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   resource: any
   resourceType: string
+  onClose?: () => void
 }
 
-export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceType }: ResourceDetailsDialogProps) {
+export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceType, onClose }: ResourceDetailsDialogProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -122,15 +124,43 @@ export function ResourceDetailsDialog({ open, onOpenChange, resource, resourceTy
     }).format(amount)
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    if (!resource?.id) return
+    
     setIsSaving(true)
 
-    // Simulate API call
-    setTimeout(() => {
+    try {
+      // Update resource in database
+      const { resourcesCatalogService } = await import('@/lib/data-service')
+      
+      await resourcesCatalogService.updateResource(resource.id, {
+        name: formData.name,
+        quantity: formData.quantity || 0,
+        base_cost: formData.cost || 0,
+        description: formData.description,
+        // Include other fields if they exist in the schema
+      } as any)
+
+      // Dispatch event to refresh charts
+      window.dispatchEvent(new Event('resource-updated'))
+      localStorage.setItem('resource-updated-timestamp', Date.now().toString())
+
       setIsSaving(false)
       setIsEditing(false)
-      // In a real app, you would update the resource data here
-    }, 1500)
+      
+      // Refresh parent component
+      if (onClose) {
+        onClose()
+      } else {
+        onOpenChange(false)
+      }
+      
+      toast.success('Resource updated successfully!')
+    } catch (error: any) {
+      console.error('Error updating resource:', error)
+      setIsSaving(false)
+      toast.error(error?.message || 'Failed to update resource')
+    }
   }
 
   const handleDelete = () => {

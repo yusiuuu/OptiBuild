@@ -17,6 +17,7 @@ import {
   Calendar as CalendarIcon,
   TrendingUp,
   CalendarDays,
+  FolderTree,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -29,6 +30,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { format, addDays, startOfWeek, endOfWeek, eachDayOfInterval, isSameDay, parseISO, isAfter, isBefore } from "date-fns"
 import { NewTaskDialog } from "@/components/schedule/new-task-dialog"
 import { TaskDetailsDialog } from "@/components/schedule/task-details-dialog"
+import { TaskFolderTree } from "@/components/tasks/task-folder-tree"
 import Link from "next/link"
 import { motion } from "framer-motion"
 import { projectsService, tasksService } from "@/lib/data-service"
@@ -62,7 +64,7 @@ interface Task {
 
 export default function SchedulePage() {
   const [date, setDate] = useState<Date>(new Date())
-  const [view, setView] = useState<"day" | "week" | "month" | "list">("list")
+  const [view, setView] = useState<"day" | "week" | "month" | "list" | "folders">("list")
   const [filter, setFilter] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
   const [isNewTaskDialogOpen, setIsNewTaskDialogOpen] = useState(false)
@@ -386,6 +388,7 @@ export default function SchedulePage() {
               {view === "week" && `${format(weekStart, "d MMM")} - ${format(weekEnd, "d MMM yyyy")}`}
               {view === "month" && format(date, "MMMM yyyy")}
               {view === "list" && "All Tasks"}
+              {view === "folders" && "Tasks by Phase/Folder"}
             </h2>
           </div>
 
@@ -431,6 +434,10 @@ export default function SchedulePage() {
                 <TabsTrigger value="list" className="data-[state=active]:bg-background">
                   <TrendingUp className="h-4 w-4 mr-1" />
                   List
+                </TabsTrigger>
+                <TabsTrigger value="folders" className="data-[state=active]:bg-background">
+                  <FolderTree className="h-4 w-4 mr-1" />
+                  Folders
                 </TabsTrigger>
               </TabsList>
             </Tabs>
@@ -573,6 +580,44 @@ export default function SchedulePage() {
                     classNames={{
                       day_today: "bg-primary text-primary-foreground font-bold",
                     }}
+                  />
+                </div>
+              ) : view === "folders" ? (
+                <div className="p-6">
+                  <TaskFolderTree
+                    tasks={filteredTasks}
+                    onTaskClick={handleTaskClick}
+                    renderTask={(task) => (
+                      <div className="flex items-center gap-2 w-full">
+                        <span className="font-medium truncate flex-1">{task.title}</span>
+                        <Badge
+                          variant={
+                            task.status === 'done' ? 'default' :
+                            task.status === 'ongoing' ? 'secondary' :
+                            task.status === 'blocked' ? 'destructive' :
+                            'outline'
+                          }
+                          className="text-xs"
+                        >
+                          {task.status}
+                        </Badge>
+                        <Badge
+                          variant={
+                            task.priority === 'high' ? 'destructive' :
+                            task.priority === 'medium' ? 'default' :
+                            'secondary'
+                          }
+                          className="text-xs"
+                        >
+                          {task.priority}
+                        </Badge>
+                        {task.projectName && (
+                          <span className="text-xs text-muted-foreground truncate max-w-[100px]">
+                            {task.projectName}
+                          </span>
+                        )}
+                      </div>
+                    )}
                   />
                 </div>
               ) : (
