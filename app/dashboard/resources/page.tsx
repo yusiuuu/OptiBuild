@@ -171,6 +171,45 @@ export default function ResourcesPage() {
     setIsResourceDetailsOpen(true)
   }
 
+  const handleDeleteResource = async (resource: any) => {
+    if (!resource?.id) {
+      toast.error('Invalid resource')
+      return
+    }
+
+    // Confirm deletion
+    if (!confirm(`Are you sure you want to delete "${resource.name}"? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      setIsLoading(true)
+      await resourcesCatalogService.deleteResource(resource.id)
+      toast.success('Resource deleted successfully')
+      
+      // Reload resources
+      const allResources = await resourcesCatalogService.getResources()
+      
+      // Categorize resources by type
+      const categorized = {
+        materials: allResources.filter((r: any) => r.type === 'material' || r.type === 'materials'),
+        equipment: allResources.filter((r: any) => r.type === 'equipment'),
+        labor: allResources.filter((r: any) => r.type === 'labor' || r.type === 'labour')
+      }
+      
+      setResources(categorized)
+      
+      // Trigger resource update event for dashboard chart refresh
+      window.dispatchEvent(new Event('resource-updated'))
+      localStorage.setItem('resource-updated-timestamp', Date.now().toString())
+    } catch (error: any) {
+      console.error('Error deleting resource:', error)
+      toast.error(error?.message || 'Failed to delete resource')
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
@@ -442,7 +481,13 @@ export default function ResourcesPage() {
                                 Export
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem className="text-red-600">
+                              <DropdownMenuItem 
+                                className="text-red-600"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDeleteResource(material)
+                                }}
+                              >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 Delete
                               </DropdownMenuItem>
@@ -521,7 +566,13 @@ export default function ResourcesPage() {
                                 Export
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem className="text-red-600">
+                              <DropdownMenuItem 
+                                className="text-red-600"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDeleteResource(item)
+                                }}
+                              >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 Delete
                               </DropdownMenuItem>
@@ -600,7 +651,13 @@ export default function ResourcesPage() {
                                 Export
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
-                              <DropdownMenuItem className="text-red-600">
+                              <DropdownMenuItem 
+                                className="text-red-600"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDeleteResource(item)
+                                }}
+                              >
                                 <Trash2 className="mr-2 h-4 w-4" />
                                 Delete
                               </DropdownMenuItem>

@@ -67,6 +67,7 @@ import { format } from "date-fns"
 import { AIChatbot } from "@/components/dashboard/ai-chatbot"
 import { getAvatarInitials } from "@/lib/utils"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
+import { notificationsService } from "@/lib/data-service"
 
 // Main dashboard page component for OptiBuild application
 // Provides comprehensive overview of construction projects, resources, and analytics
@@ -203,12 +204,12 @@ export default function DashboardPage() {
   // Load notification count
   const loadNotificationCount = async () => {
     try {
-      const { notificationsService } = await import('@/lib/data-service')
       const notifications = await notificationsService.getNotifications()
       const unread = notifications.filter(n => !notificationsService.isRead(n.id))
       setUnreadNotificationCount(unread.length)
     } catch (error) {
       console.error('Error loading notification count:', error)
+      setUnreadNotificationCount(0)
     }
   }
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, LabelList } from "recharts"
-import { resourcesCatalogService } from "@/lib/data-service"
+import { resourcesCatalogService, projectsService, projectResourcesService } from "@/lib/data-service"
 import { TrendingUp, Package, Users, Wrench } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
@@ -122,6 +122,29 @@ export function ResourceAllocationChart() {
         // Get all resources from the catalog
         const resources = await resourcesCatalogService.getResources()
         
+        // Get all projects to aggregate quantities
+        const projects = await projectsService.getProjects()
+        
+        // Aggregate quantities from project_resources for each resource
+        const resourceQuantities: Record<string, number> = {}
+        
+        // Get quantities from all project_resources
+        for (const project of projects) {
+          try {
+            const projectResources = await projectResourcesService.getProjectResources(project.id)
+            projectResources.forEach((pr: any) => {
+              if (pr.resource_id && pr.quantity) {
+                const resourceId = pr.resource_id
+                const quantity = Number(pr.quantity) || 0
+                resourceQuantities[resourceId] = (resourceQuantities[resourceId] || 0) + quantity
+              }
+            })
+          } catch (err) {
+            // Skip projects with errors
+            console.error(`Error loading resources for project ${project.id}:`, err)
+          }
+        }
+        
         // Listen for resource updates
         const handleResourceUpdate = () => {
           load()
@@ -140,33 +163,44 @@ export function ResourceAllocationChart() {
           if (allResources.length > 0) {
             setHasData(true)
             
-            // Calculate statistics (only count resources with quantity > 0 for meaningful stats)
-            const resourcesWithQuantity = allResources.filter(r => r.quantity && r.quantity > 0)
-            const totalQuantity = resourcesWithQuantity.reduce((sum, r) => sum + (r.quantity || 0), 0)
-            const materialsCount = allResources.filter(r => 
-              (r.type || '').toLowerCase().includes('material')
-            ).length
-            const equipmentCount = allResources.filter(r => 
-              (r.type || '').toLowerCase().includes('equipment')
-            ).length
-            const laborCount = allResources.filter(r => 
-              (r.type || '').toLowerCase().includes('labor') || (r.type || '').toLowerCase().includes('labour')
-            ).length
+            // Calculate statistics
+            const materialsCount = allResources.filter(r => {
+              const type = (r.type || '').toLowerCase()
+              return type.includes('material') || type === 'materials'
+            }).length
+            const equipmentCount = allResources.filter(r => {
+              const type = (r.type || '').toLowerCase()
+              return type.includes('equipment')
+            }).length
+            const laborCount = allResources.filter(r => {
+              const type = (r.type || '').toLowerCase()
+              return type.includes('labor') || type.includes('labour')
+            }).length
+            
+            // Calculate total quantity (sum of all allocated quantities)
+            const totalQuantity = Object.values(resourceQuantities).reduce((sum, qty) => sum + qty, 0)
 
             setStats({
               totalResources: allResources.length,
-              totalQuantity,
+              totalQuantity: totalQuantity, // Use actual aggregated quantities
               materialsCount,
               equipmentCount,
               laborCount,
             })
 
-            // Aggregate by type for pie chart (only include types with quantity > 0)
+            // Aggregate by type for pie chart - use aggregated quantities per type
             const typeTotals: Record<string, number> = {}
-            resourcesWithQuantity.forEach(r => {
+            allResources.forEach(r => {
               const key = (r.type || 'other').toLowerCase()
-              const qty = r.quantity || 0
-              typeTotals[key] = (typeTotals[key] || 0) + qty
+              // Normalize type names
+              let normalizedKey = key
+              if (key.includes('material')) normalizedKey = 'material'
+              else if (key.includes('equipment')) normalizedKey = 'equipment'
+              else if (key.includes('labor') || key.includes('labour')) normalizedKey = 'labor'
+              
+              // Use aggregated quantity for this resource
+              const resourceQty = resourceQuantities[r.id || ''] || 0
+              typeTotals[normalizedKey] = (typeTotals[normalizedKey] || 0) + resourceQty
             })
             const pie = Object.entries(typeTotals)
               .filter(([_, value]) => value > 0)
@@ -176,13 +210,17 @@ export function ResourceAllocationChart() {
               }))
               .sort((a, b) => b.value - a.value)
 
-            // For bar chart, show all resources (including 0 quantity) but prioritize those with quantity
+            // For bar chart, show resources with their aggregated quantities
             const bar = allResources
-              .map((r, index) => ({
-                name: r.name || 'Unnamed Resource',
-                quantity: r.quantity || 0,
-                fill: SOLID_COLORS[index % SOLID_COLORS.length],
-              }))
+              .map((r, index) => {
+                const resourceQty = resourceQuantities[r.id || ''] || 0
+                return {
+                  name: r.name || 'Unnamed Resource',
+                  quantity: resourceQty, // Use actual aggregated quantity
+                  fill: SOLID_COLORS[index % SOLID_COLORS.length],
+                }
+              })
+              .filter(item => item.quantity > 0) // Only show resources with quantities
               .sort((a, b) => {
                 // Sort by quantity first, then alphabetically
                 if (b.quantity !== a.quantity) {
@@ -292,7 +330,7 @@ export function ResourceAllocationChart() {
                 <TrendingUp className="h-4 w-4 text-green-500" />
                 <span className="text-xs text-muted-foreground font-medium">Total Quantity</span>
               </div>
-              <p className="text-2xl font-bold text-green-600">{stats.totalQuantity.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-green-600">{stats.totalQuantity.toLocaleString('en-IN')}</p>
             </div>
             <div className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 rounded-lg p-3 border border-amber-500/20">
               <div className="flex items-center gap-2 mb-1">
@@ -331,56 +369,25 @@ export function ResourceAllocationChart() {
                   Add resources to your catalog to see allocation charts
                 </p>
                 <div className="flex flex-col gap-3 text-xs text-left bg-muted/50 p-4 rounded-lg border">
-                  <p className="font-semibold mb-1">To display resource data:</p>
+                  <p className="font-semibold mb-1">To display resource allocation data:</p>
                   <ol className="list-decimal list-inside space-y-1.5 text-muted-foreground mb-3">
-                    <li>Go to <span className="font-medium text-foreground">Resources</span> page</li>
-                    <li>Click <span className="font-medium text-foreground">"Add Resource"</span> button</li>
-                    <li>Fill in resource details:
-                      <ul className="list-disc list-inside ml-4 mt-1 space-y-0.5">
-                        <li>Name (e.g., "Bricks", "Cement")</li>
-                        <li>Type (Material, Equipment, or Labor)</li>
-                        <li><span className="font-semibold text-foreground">Quantity</span> - This is required for charts!</li>
-                        <li>Unit (e.g., "kg", "pieces", "hours")</li>
-                        <li>Base Cost (optional)</li>
-                      </ul>
-                    </li>
-                    <li>Save the resource</li>
+                    <li>Add resources to your catalog in the <span className="font-medium text-foreground">Resources</span> page</li>
+                    <li>Assign resources to projects with quantities</li>
+                    <li>Go to any project and assign resources from your catalog</li>
+                    <li>The chart will automatically show aggregated quantities from all projects</li>
                   </ol>
-                  <Link href="/dashboard/resources">
-                    <Button size="sm" className="w-full">
-                      Go to Resources Page
-                    </Button>
-                  </Link>
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : barData.length > 0 && barData.every(d => d.quantity === 0) ? (
-          <div className="h-[350px] w-full flex items-center justify-center">
-            <div className="flex flex-col items-center gap-4 text-center p-6 max-w-md">
-              <Package className="h-16 w-16 text-muted-foreground/50" />
-              <div>
-                <p className="text-lg font-semibold text-foreground mb-2">Resources Found but No Quantities Set</p>
-                <p className="text-sm text-muted-foreground mb-4">
-                  You have <span className="font-semibold text-foreground">{stats.totalResources} resources</span>, but none have quantities assigned.
-                </p>
-                <div className="flex flex-col gap-3 text-xs text-left bg-muted/50 p-4 rounded-lg border">
-                  <p className="font-semibold mb-1">To display resource data in charts:</p>
-                  <ol className="list-decimal list-inside space-y-1.5 text-muted-foreground mb-3">
-                    <li>Go to <span className="font-medium text-foreground">Resources</span> page</li>
-                    <li>Click on any resource to edit it</li>
-                    <li>Set the <span className="font-semibold text-foreground">Quantity</span> field (e.g., 100, 500, 1000)</li>
-                    <li>Save the changes</li>
-                    <li>Refresh this page to see updated charts</li>
-                  </ol>
-                  <p className="text-xs text-muted-foreground italic">
-                    💡 Tip: You can also assign resources to projects with quantities, which will be reflected here.
-                  </p>
-                  <Link href="/dashboard/resources">
-                    <Button size="sm" className="w-full">
-                      Go to Resources Page
-                    </Button>
-                  </Link>
+                  <div className="flex gap-2">
+                    <Link href="/dashboard/resources">
+                      <Button size="sm" variant="outline" className="flex-1">
+                        Manage Resources
+                      </Button>
+                    </Link>
+                    <Link href="/dashboard/projects">
+                      <Button size="sm" className="flex-1">
+                        View Projects
+                      </Button>
+                    </Link>
+                  </div>
                 </div>
               </div>
             </div>
@@ -418,9 +425,14 @@ export function ResourceAllocationChart() {
                     tick={{ fill: '#6b7280', fontSize: 12 }}
                     tickLine={{ stroke: '#d1d5db' }}
                     axisLine={{ stroke: '#e5e7eb' }}
+                    tickFormatter={(value) => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value.toString()}
                   />
                   {/* Enhanced custom tooltip */}
-                  <Tooltip content={<CustomTooltip />} cursor={{ fill: 'rgba(59, 130, 246, 0.1)' }} />
+                  <Tooltip 
+                    content={<CustomTooltip />} 
+                    cursor={{ fill: 'rgba(59, 130, 246, 0.1)' }}
+                    formatter={(value: number) => value.toLocaleString('en-IN')}
+                  />
                   {/* Legend with better styling */}
                   <Legend 
                     wrapperStyle={{ paddingTop: '20px' }}
@@ -442,6 +454,7 @@ export function ResourceAllocationChart() {
                       fill="#374151"
                       fontSize={11}
                       fontWeight={600}
+                      formatter={(value: number) => value >= 1000 ? `${(value / 1000).toFixed(1)}k` : value.toString()}
                     />
                   </Bar>
                 </BarChart>
@@ -496,14 +509,14 @@ export function ResourceAllocationChart() {
                 </PieChart>
               </ResponsiveContainer>
             ) : (
-              /* Show message when pie chart has no data (all resources have 0 quantity) */
+              /* Show message when pie chart has no data */
               <div className="h-full w-full flex items-center justify-center">
                 <div className="flex flex-col items-center gap-3 text-center">
                   <Package className="h-12 w-12 text-muted-foreground/50" />
                   <div>
-                    <p className="text-lg font-semibold text-foreground">No Quantity Data Available</p>
+                    <p className="text-lg font-semibold text-foreground">No Resource Type Data Available</p>
                     <p className="text-sm text-muted-foreground mt-1">
-                      Resources exist but have no quantity assigned. Update resource quantities to see the pie chart.
+                      Resources exist but could not be categorized by type.
                     </p>
                   </div>
                 </div>

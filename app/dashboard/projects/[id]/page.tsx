@@ -476,7 +476,7 @@ export default function ProjectDetailsPage() {
                     <AlertDialogContent>
                       <AlertDialogHeader>
                         <AlertDialogTitle>Delete Project</AlertDialogTitle>
-                        <AlertDialogDescription className="space-y-2">
+                        <div className="text-sm text-muted-foreground space-y-2">
                           <p>
                             Are you sure you want to delete <strong>"{project.name}"</strong>?
                           </p>
@@ -491,7 +491,7 @@ export default function ProjectDetailsPage() {
                           <p className="font-semibold text-red-600 mt-2">
                             All of this data will be permanently deleted.
                           </p>
-                        </AlertDialogDescription>
+                        </div>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
                         <AlertDialogCancel disabled={isDeleting}>

@@ -144,14 +144,10 @@ export interface Task {
   description?: string
   start_date?: string
   end_date?: string
-  duration_days?: number  // Duration in days
   progress: number
   status: 'todo' | 'ongoing' | 'done' | 'blocked'
   priority: 'low' | 'medium' | 'high'
   assigned_to?: string  // UUID of project_team_members.id (not team_members.id directly)
-  dependencies?: string[]  // Array of task IDs this task depends on
-  phase?: string  // Phase/folder path for organization (e.g., "PHASE 1: PRE-CONSTRUCTION > 1.1 Project Initiation")
-  phase_order?: number  // Order within phase
   created_at?: string
   updated_at?: string
 }
@@ -164,7 +160,6 @@ export interface Resource {
   type: 'material' | 'labour' | 'equipment'
   unit: string  // kg, hr, item, etc.
   base_cost: number
-  quantity?: number  // Base quantity available in catalog
   description?: string
   created_at?: string
   updated_at?: string
@@ -480,27 +475,10 @@ export const tasksService = {
     
     // Map 'name' to 'title' for interface compatibility
     // Database may use 'name', but Task interface uses 'title'
-    // Parse dependencies from JSONB if it exists
-    const tasks = (data || []).map((task: any) => {
-      let parsedDependencies: string[] = []
-      if (task.dependencies) {
-        try {
-          if (typeof task.dependencies === 'string') {
-            parsedDependencies = JSON.parse(task.dependencies)
-          } else if (Array.isArray(task.dependencies)) {
-            parsedDependencies = task.dependencies
-          }
-        } catch (e) {
-          console.warn('Error parsing task dependencies:', e)
-        }
-      }
-      
-      return {
-        ...task,
-        title: task.title || task.name, // Support both 'name' and 'title'
-        dependencies: parsedDependencies,
-      }
-    })
+    const tasks = (data || []).map((task: any) => ({
+      ...task,
+      title: task.title || task.name, // Support both 'name' and 'title'
+    }))
     
     // Load project_team_members details for assigned tasks
     // assigned_to now references project_team_members.id
@@ -592,15 +570,11 @@ export const tasksService = {
     // Map 'title' to database column - handle both schema versions
     // Migration schema uses 'title', base schema uses 'name'
     // Use project_team_members.id for assigned_to instead of team_member_id
-    const { title, assigned_to, phase, phase_order, dependencies, duration_days, ...restTask } = task
+    const { title, assigned_to, ...restTask } = task
     const payload: any = {
       ...restTask,
       title: title, // Use 'title' (migration schema)
       assigned_to: assignedToProjectTeamId, // Use project_team_members.id
-      phase: phase || null,
-      phase_order: phase_order || 0,
-      duration_days: duration_days || null,
-      dependencies: dependencies && dependencies.length > 0 ? dependencies : null, // Store as JSONB array
       user_id: task.user_id || userData.user?.id,
     }
 
@@ -1224,129 +1198,47 @@ export const projectResourcesService = {
 export const constraintsService = {
   // Get all available constraints (master list)
   async getConstraintsMaster() {
-    try {
-      const { data, error } = await supabase
-        .from('constraints_master')
-        .select('*')
-        .order('name', { ascending: true })
-      
-      if (error) {
-        // If table doesn't exist, return default constraints
-        if (error.code === 'PGRST116' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
-          console.warn('constraints_master table not found, returning default constraints')
-          return getDefaultConstraints()
-        }
-        throw error
-      }
-      return data || []
-    } catch (error: any) {
-      // Fallback to default constraints if table doesn't exist
-      if (error.code === 'PGRST116' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
-        console.warn('constraints_master table not found, returning default constraints')
-        return getDefaultConstraints()
-      }
-      throw error
-    }
+    const { data, error } = await supabase
+      .from('constraints_master')
+      .select('*')
+      .order('name', { ascending: true })
+    
+    if (error) throw error
+    return data || []
   },
 
   // Get constraints assigned to a project
   async getProjectConstraints(projectId: string) {
-    try {
-      // Try with join first
-      const { data, error } = await supabase
-        .from('project_constraints')
-        .select(`
-          *,
-          constraint:constraints_master(*)
-        `)
-        .eq('project_id', projectId)
-        .order('created_at', { ascending: false })
-      
-      if (error) {
-        // If join fails, try without join
-        if (error.code === 'PGRST116' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
-          console.warn('constraints_master table not found, fetching project_constraints without join')
-          const { data: simpleData, error: simpleError } = await supabase
-            .from('project_constraints')
-            .select('*')
-            .eq('project_id', projectId)
-            .order('created_at', { ascending: false })
-          
-          if (simpleError) throw simpleError
-          return simpleData || []
-        }
-        throw error
-      }
-      return data || []
-    } catch (error: any) {
-      // Fallback: fetch without join
-      if (error.code === 'PGRST116' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
-        const { data, error: simpleError } = await supabase
-          .from('project_constraints')
-          .select('*')
-          .eq('project_id', projectId)
-          .order('created_at', { ascending: false })
-        
-        if (simpleError) throw simpleError
-        return data || []
-      }
-      throw error
-    }
+    const { data, error } = await supabase
+      .from('project_constraints')
+      .select(`
+        *,
+        constraint:constraints_master(*)
+      `)
+      .eq('project_id', projectId)
+      .order('created_at', { ascending: false })
+    
+    if (error) throw error
+    return data || []
   },
 
   // Assign constraint to project
   async assignConstraintToProject(projectId: string, constraintId: string, details?: string) {
-    try {
-      const { data, error } = await supabase
-        .from('project_constraints')
-        .insert([{
-          project_id: projectId,
-          constraint_id: constraintId,
-          details
-        }])
-        .select(`
-          *,
-          constraint:constraints_master(*)
-        `)
-        .single()
-      
-      if (error) {
-        // If join fails, try without join
-        if (error.code === 'PGRST116' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
-          const { data: simpleData, error: simpleError } = await supabase
-            .from('project_constraints')
-            .insert([{
-              project_id: projectId,
-              constraint_id: constraintId,
-              details
-            }])
-            .select('*')
-            .single()
-          
-          if (simpleError) throw simpleError
-          return simpleData
-        }
-        throw error
-      }
-      return data
-    } catch (error: any) {
-      // Fallback: insert without join
-      if (error.code === 'PGRST116' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
-        const { data, error: simpleError } = await supabase
-          .from('project_constraints')
-          .insert([{
-            project_id: projectId,
-            constraint_id: constraintId,
-            details
-          }])
-          .select('*')
-          .single()
-        
-        if (simpleError) throw simpleError
-        return data
-      }
-      throw error
-    }
+    const { data, error } = await supabase
+      .from('project_constraints')
+      .insert([{
+        project_id: projectId,
+        constraint_id: constraintId,
+        details
+      }])
+      .select(`
+        *,
+        constraint:constraints_master(*)
+      `)
+      .single()
+    
+    if (error) throw error
+    return data
   },
 
   // Remove constraint from project
@@ -1362,68 +1254,20 @@ export const constraintsService = {
 
   // Update constraint details
   async updateProjectConstraint(projectId: string, constraintId: string, details: string) {
-    try {
-      const { data, error } = await supabase
-        .from('project_constraints')
-        .update({ details })
-        .eq('project_id', projectId)
-        .eq('constraint_id', constraintId)
-        .select(`
-          *,
-          constraint:constraints_master(*)
-        `)
-        .single()
-      
-      if (error) {
-        // If join fails, try without join
-        if (error.code === 'PGRST116' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
-          const { data: simpleData, error: simpleError } = await supabase
-            .from('project_constraints')
-            .update({ details })
-            .eq('project_id', projectId)
-            .eq('constraint_id', constraintId)
-            .select('*')
-            .single()
-          
-          if (simpleError) throw simpleError
-          return simpleData
-        }
-        throw error
-      }
-      return data
-    } catch (error: any) {
-      // Fallback: update without join
-      if (error.code === 'PGRST116' || error.message?.includes('does not exist') || error.message?.includes('schema cache')) {
-        const { data, error: simpleError } = await supabase
-          .from('project_constraints')
-          .update({ details })
-          .eq('project_id', projectId)
-          .eq('constraint_id', constraintId)
-          .select('*')
-          .single()
-        
-        if (simpleError) throw simpleError
-        return data
-      }
-      throw error
-    }
+    const { data, error } = await supabase
+      .from('project_constraints')
+      .update({ details })
+      .eq('project_id', projectId)
+      .eq('constraint_id', constraintId)
+      .select(`
+        *,
+        constraint:constraints_master(*)
+      `)
+      .single()
+    
+    if (error) throw error
+    return data
   }
-}
-
-// Default constraints if constraints_master table doesn't exist
-function getDefaultConstraints(): ConstraintMaster[] {
-  return [
-    { id: 'default-1', name: 'Budget Limit', description: 'Maximum budget constraint for the project', category: 'budget' },
-    { id: 'default-2', name: 'Time Constraint', description: 'Strict deadline or timeline restrictions', category: 'time' },
-    { id: 'default-3', name: 'Environmental Restrictions', description: 'Environmental compliance and sustainability requirements', category: 'environmental' },
-    { id: 'default-4', name: 'Safety Requirements', description: 'Safety standards and regulations compliance', category: 'safety' },
-    { id: 'default-5', name: 'Accessibility Compliance', description: 'ADA and accessibility standards compliance', category: 'legal' },
-    { id: 'default-6', name: 'Zoning Restrictions', description: 'Local zoning laws and building code restrictions', category: 'legal' },
-    { id: 'default-7', name: 'Material Availability', description: 'Constraints related to material sourcing and availability', category: 'logistics' },
-    { id: 'default-8', name: 'Weather Constraints', description: 'Seasonal or weather-related limitations', category: 'environmental' },
-    { id: 'default-9', name: 'Labor Availability', description: 'Workforce availability and skill requirements', category: 'logistics' },
-    { id: 'default-10', name: 'Equipment Constraints', description: 'Equipment availability and maintenance requirements', category: 'logistics' },
-  ]
 }
 
 // Budget Categories Service
@@ -1846,6 +1690,7 @@ export const enhancedProjectsService = {
 // NOTIFICATIONS SERVICE
 // ============================================================================
 
+// Notification entity for system alerts and updates
 export interface Notification {
   id: string
   user_id: string
@@ -1859,150 +1704,197 @@ export interface Notification {
 }
 
 // Notifications Service
-// Handles real-time notifications based on actual project and resource data
+// Handles notification management with localStorage for read status
 export const notificationsService = {
   // Get all notifications for the current user
   async getNotifications(): Promise<Notification[]> {
-    const { data: userData, error: userError } = await supabase.auth.getUser()
-    if (userError) throw userError
-
-    // Generate real-time notifications based on actual data
-    const notifications: Notification[] = []
-
     try {
-      // Get all projects for the user
-      const projects = await projectsService.getProjects()
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError || !userData.user) {
+        // User not authenticated, return empty array
+        return []
+      }
+
+      // Try to fetch from database first
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', userData.user.id)
+        .order('created_at', { ascending: false })
+        .limit(50)
+
+      if (error) {
+        // Check if notifications table doesn't exist
+        const errorCode = error.code || ''
+        const errorMessage = error.message || ''
+        const errorDetails = error.details || ''
+        
+        // Handle table doesn't exist error
+        if (
+          errorCode === '42P01' || 
+          errorCode === 'PGRST116' ||
+          errorMessage.includes('does not exist') ||
+          errorMessage.includes('relation') ||
+          errorDetails.includes('does not exist')
+        ) {
+          // Table doesn't exist, return empty array (this is expected if table hasn't been created)
+          return []
+        }
+        
+        // For other errors, log and return empty array
+        console.warn('Error fetching notifications from database:', {
+          code: errorCode,
+          message: errorMessage,
+          details: errorDetails
+        })
+        return []
+      }
+
+      // Map database results to Notification interface
+      return (data || []).map((n: any) => ({
+        id: n.id,
+        user_id: n.user_id,
+        type: n.type || 'info',
+        title: n.title || 'Notification',
+        message: n.message || '',
+        read: n.read || false,
+        created_at: n.created_at,
+        project_id: n.project_id,
+        resource_id: n.resource_id
+      }))
+    } catch (error: any) {
+      // Handle any unexpected errors gracefully
+      const errorMessage = error?.message || 'Unknown error'
+      const errorCode = error?.code || 'UNKNOWN'
       
-      // Get all resources
-      const resources = await resourcesCatalogService.getResources()
+      // Only log if it's not a table doesn't exist error
+      if (!errorMessage.includes('does not exist') && !errorMessage.includes('relation')) {
+        console.warn('Unexpected error fetching notifications:', {
+          message: errorMessage,
+          code: errorCode,
+          error: error
+        })
+      }
       
-      // Check for resource shortages
-      for (const resource of resources) {
-        if (resource.quantity && resource.quantity < 10) {
-          notifications.push({
-            id: `resource-shortage-${resource.id}`,
-            user_id: userData.user.id,
-            type: 'alert',
-            title: 'Resource Shortage Alert',
-            message: `${resource.name} is running low (${resource.quantity} remaining). Please restock soon.`,
-            read: false,
-            created_at: new Date().toISOString(),
-            resource_id: resource.id,
-          })
-        }
-      }
-
-      // Check for budget overruns
-      for (const project of projects) {
-        if (project.budget) {
-          try {
-            const expenses = await expensesService.getProjectExpenses(project.id)
-            const totalExpenses = expenses.reduce((sum: number, exp: any) => sum + (exp.amount || 0), 0)
-            const budget = Number(project.budget)
-            
-            if (budget > 0 && totalExpenses > budget * 1.05) {
-              const overrunPercent = ((totalExpenses - budget) / budget * 100).toFixed(1)
-              notifications.push({
-                id: `budget-overrun-${project.id}`,
-                user_id: userData.user.id,
-                type: 'alert',
-                title: 'Budget Overrun',
-                message: `${project.name} is currently ${overrunPercent}% over budget. Review required.`,
-                read: false,
-                created_at: new Date().toISOString(),
-                project_id: project.id,
-              })
-            }
-          } catch (err) {
-            // Skip projects with errors
-            console.warn(`Error checking budget for project ${project.id}:`, err)
-          }
-        }
-      }
-
-      // Check for delayed tasks
-      for (const project of projects) {
-        try {
-          const tasks = await tasksService.getTasks(project.id)
-          const today = new Date()
-          today.setHours(0, 0, 0, 0)
-          
-          const delayedTasks = tasks.filter((task: any) => {
-            if (!task.end_date) return false
-            const endDate = new Date(task.end_date)
-            endDate.setHours(0, 0, 0, 0)
-            return endDate < today && task.status !== 'completed'
-          })
-
-          if (delayedTasks.length > 0) {
-            notifications.push({
-              id: `delayed-tasks-${project.id}`,
-              user_id: userData.user.id,
-              type: 'alert',
-              title: 'Delayed Tasks',
-              message: `${project.name} has ${delayedTasks.length} task(s) past their due date. Action required.`,
-              read: false,
-              created_at: new Date().toISOString(),
-              project_id: project.id,
-            })
-          }
-        } catch (err) {
-          // Skip projects with errors
-          console.warn(`Error checking tasks for project ${project.id}:`, err)
-        }
-      }
-
-      // Check for schedule updates (recently updated projects)
-      for (const project of projects) {
-        if (project.updated_at) {
-          const updatedAt = new Date(project.updated_at)
-          const hoursSinceUpdate = (Date.now() - updatedAt.getTime()) / (1000 * 60 * 60)
-          
-          if (hoursSinceUpdate < 24) {
-            notifications.push({
-              id: `schedule-updated-${project.id}-${project.updated_at}`,
-              user_id: userData.user.id,
-              type: 'update',
-              title: 'Schedule Updated',
-              message: `The schedule for ${project.name} has been recently updated.`,
-              read: false,
-              created_at: project.updated_at,
-              project_id: project.id,
-            })
-          }
-        }
-      }
-
-      // Sort by created_at (newest first)
-      notifications.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      
-      return notifications
-    } catch (error) {
-      console.error('Error generating notifications:', error)
+      // Always return empty array on error to prevent app crash
       return []
     }
   },
 
-  // Mark notification as read
+  // Check if a notification is marked as read (uses localStorage)
+  isRead(notificationId: string): boolean {
+    if (typeof window === 'undefined') return false
+    try {
+      const readNotifications = JSON.parse(
+        localStorage.getItem('read_notifications') || '[]'
+      )
+      return readNotifications.includes(notificationId)
+    } catch {
+      return false
+    }
+  },
+
+  // Mark a notification as read
   async markAsRead(notificationId: string): Promise<void> {
-    // Since we're generating notifications on-the-fly, we'll store read status in localStorage
-    const readNotifications = JSON.parse(localStorage.getItem('readNotifications') || '[]')
-    if (!readNotifications.includes(notificationId)) {
-      readNotifications.push(notificationId)
-      localStorage.setItem('readNotifications', JSON.stringify(readNotifications))
+    try {
+      // Update in database if possible
+      const { data: userData } = await supabase.auth.getUser()
+      if (userData.user) {
+        const { error } = await supabase
+          .from('notifications')
+          .update({ read: true })
+          .eq('id', notificationId)
+          .eq('user_id', userData.user.id)
+
+        // If table doesn't exist, just use localStorage
+        if (error && error.code !== '42P01' && !error.message.includes('does not exist')) {
+          console.warn('Error updating notification in database:', error)
+        }
+      }
+
+      // Also store in localStorage for offline support
+      if (typeof window !== 'undefined') {
+        try {
+          const readNotifications = JSON.parse(
+            localStorage.getItem('read_notifications') || '[]'
+          )
+          if (!readNotifications.includes(notificationId)) {
+            readNotifications.push(notificationId)
+            localStorage.setItem('read_notifications', JSON.stringify(readNotifications))
+          }
+        } catch (e) {
+          console.warn('Error updating localStorage:', e)
+        }
+      }
+    } catch (error) {
+      console.error('Error marking notification as read:', error)
     }
   },
 
   // Mark all notifications as read
   async markAllAsRead(): Promise<void> {
-    const notifications = await this.getNotifications()
-    const readNotifications = notifications.map(n => n.id)
-    localStorage.setItem('readNotifications', JSON.stringify(readNotifications))
+    try {
+      const { data: userData } = await supabase.auth.getUser()
+      if (userData.user) {
+        // Update in database if possible
+        const { error } = await supabase
+          .from('notifications')
+          .update({ read: true })
+          .eq('user_id', userData.user.id)
+          .eq('read', false)
+
+        // If table doesn't exist, just use localStorage
+        if (error && error.code !== '42P01' && !error.message.includes('does not exist')) {
+          console.warn('Error updating notifications in database:', error)
+        }
+      }
+
+      // Mark all current notifications as read in localStorage
+      if (typeof window !== 'undefined') {
+        try {
+          const notifications = await this.getNotifications()
+          const readNotifications = notifications.map(n => n.id)
+          localStorage.setItem('read_notifications', JSON.stringify(readNotifications))
+        } catch (e) {
+          console.warn('Error updating localStorage:', e)
+        }
+      }
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error)
+    }
   },
 
-  // Get read status for a notification
-  isRead(notificationId: string): boolean {
-    const readNotifications = JSON.parse(localStorage.getItem('readNotifications') || '[]')
-    return readNotifications.includes(notificationId)
+  // Create a new notification (for internal use)
+  async createNotification(notification: Omit<Notification, 'id' | 'created_at' | 'read'>): Promise<Notification | null> {
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser()
+      if (userError || !userData.user) {
+        return null
+      }
+
+      const { data, error } = await supabase
+        .from('notifications')
+        .insert([{
+          ...notification,
+          user_id: userData.user.id,
+          read: false
+        }])
+        .select()
+        .single()
+
+      if (error) {
+        // If notifications table doesn't exist, return null
+        if (error.code === '42P01' || error.message.includes('does not exist')) {
+          console.warn('Notifications table does not exist, skipping notification creation')
+          return null
+        }
+        throw error
+      }
+
+      return data
+    } catch (error) {
+      console.error('Error creating notification:', error)
+      return null
+    }
   }
 }
